@@ -1,0 +1,28 @@
+# --- Android & Gradle ---
+.gradle/
+build/
+captures/
+local.properties
+.cxx/
+*.ap_
+*.apk
+*.dex
+
+# --- Native / NDK ---
+# Kita abaikan libs dan obj karena sudah dibungkus ke dalam .aar oleh GitHub Actions
+jniLibs/
+libs/
+obj/
+
+# --- IDE & Editor ---
+.idea/
+*.iml
+.vscode/
+bin/
+gen/
+
+# --- OS & Misc ---
+.DS_Store
+Thumbs.db
+*.log
+.github/artifacts/
