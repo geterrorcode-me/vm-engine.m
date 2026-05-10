@@ -1,2 +1,5 @@
 #include "vm_internal.h"
-int init_vfs_bridge(const char* path) { LOGI("VFS Mapped to: %s", path); return 0; }
+
+extern "C" void init_vfs_bridge(const char* path) {
+    LOGI("vMeer VFS: Mapping ROM from %s", path);
+}

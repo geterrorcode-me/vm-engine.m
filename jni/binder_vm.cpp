@@ -1,2 +1,5 @@
 #include "vm_internal.h"
-void start_virtual_binder() { LOGI("Hybrid Binder Active"); }
+
+extern "C" void start_virtual_binder() {
+    LOGI("vMeer Binder: Hybrid IPC Layer Active");
+}
