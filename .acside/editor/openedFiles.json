@@ -20,13 +20,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 438,
-          "line": 9
+          "index": 892,
+          "line": 33
         },
         "start": {
           "column": 0,
-          "index": 438,
-          "line": 9
+          "index": 892,
+          "line": 33
         }
       }
     },
@@ -44,7 +44,52 @@
           "line": 0
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vm_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_main.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 3403,
+          "line": 98
+        },
+        "start": {
+          "column": 0,
+          "index": 3403,
+          "line": 98
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }
