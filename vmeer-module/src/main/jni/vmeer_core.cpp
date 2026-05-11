@@ -5,10 +5,10 @@
 
 // Import header dari modul-modul sebelumnya
 // (Asumsi kita sudah menyatukan header-nya)
-#include "vfs_hook.h"
-#include "binder_vm.h"
-#include "surface_vm.h"
-#include "vmeer_system.h"
+#include "include/vfs_hook.h"
+#include "include/binder_vm.h"
+#include "include/surface_vm.h"
+#include "include/vmeer_system.h"
 
 #define LOG_TAG "vMeer_Core"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
