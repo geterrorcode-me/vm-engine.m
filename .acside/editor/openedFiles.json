@@ -104,7 +104,37 @@
           "line": 3
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml",
+      "selection": {
+        "end": {
+          "column": 30,
+          "index": 562,
+          "line": 19
+        },
+        "start": {
+          "column": 30,
+          "index": 562,
+          "line": 19
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/build.gradle",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/AndroidManifest.xml"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }
