@@ -5,11 +5,11 @@
 extern "C" {
 #endif
 
-// Deklarasi fungsi utama Binder Proxy
 void start_binder_proxy();
+const char* resolve_virtual_service(const char* original_name);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VMEER_BINDER_VM_H
+#endif
