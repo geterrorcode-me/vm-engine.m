@@ -125,16 +125,91 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 2317,
-          "line": 75
+          "index": 3995,
+          "line": 118
         },
         "start": {
           "column": 0,
-          "index": 2317,
-          "line": 75
+          "index": 3995,
+          "line": 118
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1952,
+          "line": 53
+        },
+        "start": {
+          "column": 0,
+          "index": 1738,
+          "line": 50
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/surface_vm.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 4174,
+          "line": 110
+        },
+        "start": {
+          "column": 0,
+          "index": 4174,
+          "line": 110
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_zygote.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2987,
+          "line": 82
+        },
+        "start": {
+          "column": 0,
+          "index": 2987,
+          "line": 82
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_system.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 3052,
+          "line": 86
+        },
+        "start": {
+          "column": 0,
+          "index": 3052,
+          "line": 86
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_hw_bridge.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2898,
+          "line": 77
+        },
+        "start": {
+          "column": 0,
+          "index": 2898,
+          "line": 77
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_hw_bridge.cpp"
 }
