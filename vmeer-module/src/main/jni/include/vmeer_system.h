@@ -5,7 +5,6 @@
 extern "C" {
 #endif
 
-// Deklarasi fungsi agar bisa diakses modul lain
 void start_virtual_system_services();
 void register_virtual_package(const char* pkgName, int uid);
 
@@ -13,4 +12,4 @@ void register_virtual_package(const char* pkgName, int uid);
 }
 #endif
 
-#endif // VMEER_SYSTEM_H
+#endif

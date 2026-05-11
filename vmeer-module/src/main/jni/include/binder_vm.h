@@ -5,10 +5,11 @@
 extern "C" {
 #endif
 
+// Deklarasi fungsi utama Binder Proxy
 void start_binder_proxy();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif // VMEER_BINDER_VM_H
