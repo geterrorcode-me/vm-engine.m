@@ -11,9 +11,11 @@ set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 
 # Daftarkan semua lokasi header agar bisa dipanggil dengan #include
 include_directories(
-    ${JNI_SRC_DIR}
-    ${JNI_SRC_DIR}/bridge
-    ${JNI_SRC_DIR}/binder
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/bridge
+    ${CMAKE_CURRENT_SOURCE_DIR}/binder
+    ${CMAKE_CURRENT_SOURCE_DIR}/include           # Tambahkan ini
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/internal    # Tambahkan ini
     ${SHADOWHOOK_DIR}/include
 )
 

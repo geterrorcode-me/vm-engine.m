@@ -1,4 +1,5 @@
-#include "vm_internal.h"
+#include "include/internal/vm_internal.h"
+
 #include <EGL/egl.h>
 
 void init_egl_bridge() {

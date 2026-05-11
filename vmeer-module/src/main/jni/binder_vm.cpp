@@ -1,4 +1,5 @@
-#include "vm_internal.h"
+#include "include/internal/vm_internal.h"
+
 
 extern "C" {
     void start_virtual_binder() {
