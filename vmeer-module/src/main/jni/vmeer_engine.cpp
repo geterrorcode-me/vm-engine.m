@@ -162,6 +162,6 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
         LOGI("vMeer Engine: Hook libbinder.so successful.");
     }
 
-    LOGI("vMeer Engine: Booting progress [100% COMPLETE]");
+    LOGI("vMeer Engine: Booting progress [100%% COMPLETE]");
     return JNI_VERSION_1_6;
 }
