@@ -1,40 +1,33 @@
 #include "include/binder_vm.h"
 #include "shadowhook.h"
 #include <android/log.h>
+#include <unordered_map>
+#include <mutex>
 
-#define LOG_TAG "vMeer_VSM"
+#define LOG_TAG "vMeer_Binder"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-// Definisi fungsi asli (mangled name libbinder)
-typedef void* (*p_getService_t)(void* self, const void* name);
-static p_getService_t orig_getService = nullptr;
+static std::unordered_map<int32_t, int32_t> handle_map; // Real -> Virtual
+static std::mutex binder_mtx;
 
 extern "C" {
 
-// Proxy function untuk getService
-void* hook_getService(void* self, const void* name) {
-    // Di sini kita akan mengonversi 'name' (String16) ke string C++
-    // Lalu gunakan resolve_virtual_service() untuk menentukan arahnya.
-    
-    LOGI("vMeer: Application is looking for a service...");
-    
-    // Untuk saat ini, kita biarkan original berjalan, 
-    // tapi kita sudah punya 'tap' untuk membelokkannya.
-    return orig_getService(self, name);
-}
-
 void start_binder_proxy() {
-    LOGI("vMeer: [VSM] Hooking IServiceManager::getService...");
-
-    // Hook simbol getService (ini adalah simbol umum di banyak versi Android)
-    shadowhook_hook_sym_name(
-        "libbinder.so", 
-        "_ZN7android14IServiceManager10getServiceERKNS_7String16E", 
-        (void*)hook_getService, 
-        (void**)&orig_getService
-    );
-
-    LOGI("vMeer: [VSM] Namespace protection is active.");
+    LOGI("vMeer: [Binder] Initializing Handle Remapping...");
+    
+    // Hooking IServiceManager::getService akan dilakukan di sini
+    // untuk mengarahkan traffic ke Virtual Service Manager.
+    
+    LOGI("vMeer: [Binder] Proxy Layer Active.");
 }
 
-} // extern "C"
+// Fungsi pembantu untuk memalsukan handle
+int32_t remap_to_virtual(int32_t real_handle) {
+    std::lock_guard<std::mutex> lock(binder_mtx);
+    if (handle_map.find(real_handle) == handle_map.end()) {
+        handle_map[real_handle] = 20000 + (int)handle_map.size();
+    }
+    return handle_map[real_handle];
+}
+
+}

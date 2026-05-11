@@ -5,16 +5,121 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1268,
-          "line": 40
+          "index": 946,
+          "line": 33
         },
         "start": {
           "column": 0,
-          "index": 1268,
-          "line": 40
+          "index": 946,
+          "line": 33
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_system.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1041,
+          "line": 38
+        },
+        "start": {
+          "column": 0,
+          "index": 1041,
+          "line": 38
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_aidl_table.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 727,
+          "line": 27
+        },
+        "start": {
+          "column": 0,
+          "index": 727,
+          "line": 27
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_core.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 878,
+          "line": 28
+        },
+        "start": {
+          "column": 0,
+          "index": 878,
+          "line": 28
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_system.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 309,
+          "line": 18
+        },
+        "start": {
+          "column": 0,
+          "index": 309,
+          "line": 18
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_stealth.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2377,
+          "line": 72
+        },
+        "start": {
+          "column": 0,
+          "index": 2377,
+          "line": 72
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
+      "selection": {
+        "end": {
+          "column": 21,
+          "index": 988,
+          "line": 33
+        },
+        "start": {
+          "column": 21,
+          "index": 988,
+          "line": 33
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1852,
+          "line": 55
+        },
+        "start": {
+          "column": 0,
+          "index": 1852,
+          "line": 55
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_vm.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }

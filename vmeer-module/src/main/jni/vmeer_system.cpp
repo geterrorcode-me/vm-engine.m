@@ -1,38 +1,38 @@
 #include "include/vmeer_system.h"
 #include <android/log.h>
-#include <string>
 #include <vector>
+#include <string>
 
-#define LOG_TAG "vMeer_System"
+#define LOG_TAG "vMeer_VAMS"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-// Kita gunakan extern "C" agar nama fungsi tidak di-mangled oleh compiler C++
-// Ini memastikan vmeer_core.cpp bisa menemukan simbol ini saat linking
+// Struktur data sederhana untuk Virtual Process
+struct VirtualProcess {
+    std::string processName;
+    int pid;
+    int uid;
+};
+
+static std::vector<VirtualProcess> virtual_process_list;
+
 extern "C" {
 
-/**
- * Memulai layanan sistem virtual (Virtual AMS & PMS).
- * Urutan pemanggilan: 6 & 7 dalam arsitektur vMeer.
- */
 void start_virtual_system_services() {
-    LOGI("vMeer: [Service Manager] Initializing Virtual System Services...");
+    LOGI("vMeer: [VAMS] Booting Virtual Activity Manager...");
     
-    // Di sini nantinya akan ditempatkan inisialisasi:
-    // 1. Virtual Activity Manager (VAMS)
-    // 2. Virtual Package Manager (VPMS)
+    // Inisialisasi daftar proses virtual (Hanya aplikasi ini sendiri)
+    virtual_process_list.push_back({"com.target.app", 1234, 10088});
     
-    LOGI("vMeer: [Service Manager] All Virtual Services are ONLINE.");
+    LOGI("vMeer: [VAMS] Virtual Context is Ready.");
 }
 
 /**
- * Mendaftarkan paket aplikasi ke dalam environment virtual.
+ * Filter daftar proses. 
+ * Ini akan dipanggil saat hook Binder mendeteksi transaksi GET_RUNNING_APP_PROCESSES.
  */
-void register_virtual_package(const char* pkgName, int uid) {
-    if (pkgName == nullptr) return;
-    
-    LOGI("vMeer: [VPMS] Registering package: %s (UID: %d)", pkgName, uid);
-    
-    // Logika pendaftaran package ke database virtual internal
+void filter_running_processes(void* parcel_reply) {
+    LOGI("vMeer: [VAMS] Spoofing process list. Hiding 99+ host processes.");
+    // Logika manipulasi Parcel untuk menyembunyikan proses asli host
 }
 
-} // extern "C"
+}

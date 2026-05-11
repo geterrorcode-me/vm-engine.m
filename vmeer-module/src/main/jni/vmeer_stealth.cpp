@@ -1,74 +1,72 @@
-#include <jni.h>
-#include <android/log.h>
-#include <string.h>
-#include <dirent.h>
-#include <dlfcn.h>
+#include "include/vmeer_stealth.h"
 #include "shadowhook.h"
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <string>
+#include <android/log.h>
 
 #define LOG_TAG "vMeer_Stealth"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-// =============================================================================
-// BAGIAN 1: FILE CLOAKING (Menyembunyikan Folder vMeer)
-// =============================================================================
-/**
- * Aplikasi sering memindai direktori untuk mencari tanda-tanda Virtual App.
- * Kita mencegat fungsi 'readdir' agar tidak menampilkan folder vMeer.
- */
-typedef struct dirent* (*p_readdir)(DIR*);
-static p_readdir orig_readdir = nullptr;
+typedef ssize_t (*p_read_t)(int fd, void *buf, size_t count);
+static p_read_t orig_read = nullptr;
 
-struct dirent* hook_readdir(DIR* dirp) {
-    struct dirent* entry;
-    while ((entry = orig_readdir(dirp)) != nullptr) {
-        // Jika menemukan nama paket vMeer, skip dan cari entri berikutnya
-        if (strstr(entry->d_name, "com.vmeer.io") || strstr(entry->d_name, "vmeerd")) {
-            continue; 
+typedef int (*p_open_t)(const char *pathname, int flags, mode_t mode);
+static p_open_t orig_open = nullptr;
+
+static int maps_fd = -1;
+
+extern "C" {
+
+// Hook read: Memotong baris yang mengandung "vmeer" atau "shadowhook"
+ssize_t hook_read(int fd, void *buf, size_t count) {
+    ssize_t ret = orig_read(fd, buf, count);
+    
+    if (ret > 0 && fd == maps_fd && maps_fd != -1) {
+        std::string content((char*)buf, ret);
+        size_t pos;
+        
+        // Hapus jejak vMeer dari memory maps
+        while ((pos = content.find("vmeer")) != std::string::npos || 
+               (pos = content.find("shadowhook")) != std::string::npos) {
+            
+            size_t line_start = content.rfind('\n', pos);
+            size_t line_end = content.find('\n', pos);
+            
+            if (line_start == std::string::npos) line_start = 0;
+            else line_start += 1; // Mulai setelah newline sebelumnya
+
+            if (line_end == std::string::npos) line_end = content.length();
+            else line_end += 1; // Sertakan newline-nya
+            
+            content.erase(line_start, line_end - line_start);
         }
-        break;
+        
+        memcpy(buf, content.c_str(), content.length());
+        return content.length();
     }
-    return entry;
+    return ret;
 }
 
-// =============================================================================
-// BAGIAN 2: MAPS FILTERING (Menyembunyikan Hook Library)
-// =============================================================================
-/**
- * Aplikasi canggih akan membaca /proc/self/maps untuk mencari 'shadowhook' 
- * atau library kita. Kita harus memfilter output pembacaan file tersebut.
- */
-typedef ssize_t (*p_read)(int, void*, size_t);
-static p_read orig_read = nullptr;
-
-ssize_t hook_read(int fd, void* buf, size_t count) {
-    ssize_t bytes = orig_read(fd, buf, count);
-    if (bytes > 0) {
-        // Jika data mengandung kata kunci vmeer atau shadowhook, kita sensor
-        char* p = (char*)buf;
-        if (strstr(p, "vmeer") || strstr(p, "shadowhook")) {
-            memset(buf, 0, bytes); // Hapus jejak di buffer memori
-            return 0; 
-        }
+// Hook open: Menandai FD jika aplikasi membuka /proc/self/maps
+int hook_open(const char *pathname, int flags, mode_t mode) {
+    int fd = orig_open(pathname, flags, mode);
+    if (pathname != nullptr && strstr(pathname, "maps") != nullptr) {
+        maps_fd = fd;
+        LOGI("vMeer: [Stealth] Targeted maps access detected on FD: %d", fd);
     }
-    return bytes;
+    return fd;
 }
 
-// =============================================================================
-// BAGIAN 3: STEALTH INITIALIZATION (Integration)
-// =============================================================================
+void init_vmeer_stealth() {
+    LOGI("vMeer: [Stealth] Engaging Cloaking Device...");
+    
+    // Hook open dan read di libc.so
+    shadowhook_hook_sym_name("libc.so", "open", (void*)hook_open, (void**)&orig_open);
+    shadowhook_hook_sym_name("libc.so", "read", (void*)hook_read, (void**)&orig_read);
+    
+    LOGI("vMeer: [Stealth] vMeer is now invisible in memory maps.");
+}
 
-void init_stealth_module() {
-    LOGI("vMeer: Activating Stealth Mode...");
-
-    // 1. Hook readdir untuk manipulasi hasil list file
-    shadowhook_hook_sym_name(
-        "libc.so", "readdir", 
-        (void*)hook_readdir, (void**)&orig_readdir
-    );
-
-    // 2. Hook read untuk memfilter pembacaan /proc/self/maps
-    shadowhook_hook_sym_name(
-        "libc.so", "read", 
-        (void*)hook_read, (void**)&orig_read
-    );
 }

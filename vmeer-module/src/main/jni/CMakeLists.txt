@@ -31,6 +31,7 @@ add_library(vmeer_engine SHARED
     surface_vm.cpp
     binder_vm.cpp
     vmeer_system.cpp
+    vmeer_stealth.cpp
 )
 
 target_link_libraries(vmeer_engine 
