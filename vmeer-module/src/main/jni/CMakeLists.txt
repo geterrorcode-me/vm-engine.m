@@ -26,6 +26,7 @@ set_target_properties(shadowhook PROPERTIES IMPORTED_LOCATION
 add_library(vmeer_engine SHARED 
     vmeer_engine.cpp 
     vmeer_core.cpp
+    egl_bridge.cpp
     vmeer_stealth.cpp
     surface_vm.cpp
     binder_vm.cpp
@@ -36,7 +37,9 @@ target_link_libraries(vmeer_engine
     shadowhook 
     ${log-lib}
     ${android-lib}
-    ${egl-lib}
+    ${egl-lib}           # egl-lib biasanya dari find_library(egl-lib EGL)
+    GLESv2               # Tambahkan library OpenGL ES 2.0
+    atomic               # Penting untuk arsitektur arm64
 )
 
 # Modul Standalone untuk akses langsung dari Java (Opsional)

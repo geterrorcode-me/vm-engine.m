@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "column": 1,
+          "index": 1249,
+          "line": 42
         },
         "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "column": 1,
+          "index": 1249,
+          "line": 42
         }
       }
     },
@@ -35,13 +35,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 1288,
+          "line": 37
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 1288,
+          "line": 37
         }
       }
     },
@@ -94,17 +94,47 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_system.cpp",
       "selection": {
         "end": {
+          "column": 15,
+          "index": 1159,
+          "line": 37
+        },
+        "start": {
+          "column": 15,
+          "index": 1159,
+          "line": 37
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_bridge.cpp",
+      "selection": {
+        "end": {
+          "column": 31,
+          "index": 75,
+          "line": 2
+        },
+        "start": {
+          "column": 31,
+          "index": 75,
+          "line": 2
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/egl_bridge.h",
+      "selection": {
+        "end": {
           "column": 0,
-          "index": 1160,
-          "line": 38
+          "index": 444,
+          "line": 26
         },
         "start": {
           "column": 0,
-          "index": 1160,
-          "line": 38
+          "index": 444,
+          "line": 26
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_system.h"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_system.cpp"
 }
