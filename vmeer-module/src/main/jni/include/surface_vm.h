@@ -3,10 +3,10 @@
 
 #include <jni.h>
 
-// Inisialisasi pipeline grafis (Urutan 5)
+// Fungsi bridge untuk dipanggil dari C++ (vmeer_core)
 void start_graphics_proxy();
 
-// Entry point untuk JNI
+// Fungsi JNI untuk dipanggil dari Java
 extern "C" JNIEXPORT void JNICALL Java_com_vmeer_io_GraphicsEngine_nativeInit(JNIEnv* env, jobject thiz);
 
 #endif

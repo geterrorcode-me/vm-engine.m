@@ -20,13 +20,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 2212,
-          "line": 69
+          "index": 1320,
+          "line": 47
         },
         "start": {
           "column": 0,
-          "index": 2212,
-          "line": 69
+          "index": 1320,
+          "line": 47
         }
       }
     },
@@ -50,13 +50,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 4828,
-          "line": 126
+          "index": 1350,
+          "line": 42
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 1350,
+          "line": 42
         }
       }
     },
@@ -94,14 +94,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_core.cpp",
       "selection": {
         "end": {
-          "column": 29,
-          "index": 204,
-          "line": 7
+          "column": 0,
+          "index": 825,
+          "line": 27
         },
         "start": {
-          "column": 29,
-          "index": 204,
-          "line": 7
+          "column": 0,
+          "index": 825,
+          "line": 27
         }
       }
     },
@@ -125,12 +125,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 285,
+          "index": 312,
           "line": 12
         },
         "start": {
           "column": 0,
-          "index": 285,
+          "index": 312,
           "line": 12
         }
       }
