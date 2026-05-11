@@ -1,4 +1,4 @@
-#include "include/internal/vm_internal.h"
+#include "include/vm_internal.h"
 
 #include <EGL/egl.h>
 

@@ -1,4 +1,4 @@
-#include "include/internal/vm_internal.h"
+#include "include/vm_internal.h"
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_vmeer_io_EngineLoader_startEngine(JNIEnv* env, jobject thiz, jstring romPath) {

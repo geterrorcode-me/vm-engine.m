@@ -1,4 +1,4 @@
-#include "include/internal/vm_internal.h"
+#include "include/vm_internal.h"
 
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
