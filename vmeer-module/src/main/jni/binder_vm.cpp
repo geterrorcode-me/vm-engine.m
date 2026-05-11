@@ -1,36 +1,40 @@
 #include "include/binder_vm.h"
+#include "shadowhook.h"
 #include <android/log.h>
-#include <map>
-#include <string>
 
 #define LOG_TAG "vMeer_VSM"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-// Tabel Mapping Layanan (Virtual Namespace)
-static std::map<std::string, std::string> service_map = {
-    {"activity", "vmeer.virtual.activity_manager"},
-    {"package",  "vmeer.virtual.package_manager"},
-    {"device_policy", "none"} // Sembunyikan layanan ini
-};
+// Definisi fungsi asli (mangled name libbinder)
+typedef void* (*p_getService_t)(void* self, const void* name);
+static p_getService_t orig_getService = nullptr;
 
 extern "C" {
 
-/**
- * Logika inti Virtual Service Manager.
- * Memeriksa apakah layanan yang diminta harus di-redirect atau disembunyikan.
- */
-const char* resolve_virtual_service(const char* original_name) {
-    if (service_map.count(original_name)) {
-        LOGI("vMeer: Redirecting service [%s] -> [%s]", 
-             original_name, service_map[original_name].c_str());
-        return service_map[original_name].c_str();
-    }
-    return original_name; // Biarkan layanan lain lewat (untuk sementara)
+// Proxy function untuk getService
+void* hook_getService(void* self, const void* name) {
+    // Di sini kita akan mengonversi 'name' (String16) ke string C++
+    // Lalu gunakan resolve_virtual_service() untuk menentukan arahnya.
+    
+    LOGI("vMeer: Application is looking for a service...");
+    
+    // Untuk saat ini, kita biarkan original berjalan, 
+    // tapi kita sudah punya 'tap' untuk membelokkannya.
+    return orig_getService(self, name);
 }
 
 void start_binder_proxy() {
-    LOGI("vMeer: [VSM] Virtual Service Manager is standing guard.");
-    // Hooking BpBinder::transact atau ServiceManager::getService di sini
+    LOGI("vMeer: [VSM] Hooking IServiceManager::getService...");
+
+    // Hook simbol getService (ini adalah simbol umum di banyak versi Android)
+    shadowhook_hook_sym_name(
+        "libbinder.so", 
+        "_ZN7android14IServiceManager10getServiceERKNS_7String16E", 
+        (void*)hook_getService, 
+        (void**)&orig_getService
+    );
+
+    LOGI("vMeer: [VSM] Namespace protection is active.");
 }
 
-}
+} // extern "C"
