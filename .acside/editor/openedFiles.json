@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
       "selection": {
         "end": {
-          "column": 29,
-          "index": 420,
-          "line": 12
+          "column": 0,
+          "index": 1540,
+          "line": 53
         },
         "start": {
-          "column": 29,
-          "index": 420,
-          "line": 12
+          "column": 0,
+          "index": 1540,
+          "line": 53
         }
       }
     },
@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder/binder_rewriter.cpp",
       "selection": {
         "end": {
-          "column": 18,
-          "index": 18,
-          "line": 0
+          "column": 2,
+          "index": 67,
+          "line": 2
         },
         "start": {
-          "column": 18,
-          "index": 18,
-          "line": 0
+          "column": 2,
+          "index": 67,
+          "line": 2
         }
       }
     },
@@ -59,7 +59,37 @@
           "line": 6
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/build.gradle",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/settings.gradle",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vm_internal.h"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder/binder_rewriter.cpp"
 }
