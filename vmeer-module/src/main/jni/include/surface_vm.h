@@ -3,10 +3,15 @@
 
 #include <jni.h>
 
-// Fungsi bridge untuk dipanggil dari C++ (vmeer_core)
-void start_graphics_proxy();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Fungsi JNI untuk dipanggil dari Java
-extern "C" JNIEXPORT void JNICALL Java_com_vmeer_io_GraphicsEngine_nativeInit(JNIEnv* env, jobject thiz);
+void start_graphics_proxy();
+JNIEXPORT void JNICALL Java_com_vmeer_io_GraphicsEngine_nativeInit(JNIEnv* env, jobject thiz);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

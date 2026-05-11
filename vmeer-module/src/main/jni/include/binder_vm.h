@@ -1,10 +1,14 @@
 #ifndef VMEER_BINDER_VM_H
 #define VMEER_BINDER_VM_H
 
-// Inisialisasi pengalihan Binder (Urutan 3)
-void init_vmeer_internals();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Fungsi untuk membelokkan transaksi binder tertentu
-void redirect_binder_transaction(int code);
+void start_binder_proxy();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,12 +1,16 @@
 #ifndef VMEER_SYSTEM_H
 #define VMEER_SYSTEM_H
 
-#include <string>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Memulai Virtual System Services (Urutan 6 & 7)
+// Deklarasi fungsi agar bisa diakses modul lain
 void start_virtual_system_services();
-
-// Mendaftarkan aplikasi ke dalam Virtual PMS
 void register_virtual_package(const char* pkgName, int uid);
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif // VMEER_SYSTEM_H
