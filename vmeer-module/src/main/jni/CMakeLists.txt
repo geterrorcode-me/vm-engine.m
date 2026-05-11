@@ -6,9 +6,10 @@ set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 
 # Konfigurasi Include Path
 include_directories(
-    ${JNI_SRC_DIR}
-    ${JNI_SRC_DIR}/bridge
-    ${JNI_SRC_DIR}/binder
+   ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include  # Tambahkan baris ini
+    ${CMAKE_CURRENT_SOURCE_DIR}/bridge
+    ${CMAKE_CURRENT_SOURCE_DIR}/binder
     ${SHADOWHOOK_DIR}/include
 )
 
