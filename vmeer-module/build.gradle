@@ -1,8 +1,11 @@
 apply plugin: 'com.android.library'
 
 android {
+    // Tambahkan namespace di bawah ini (bebas, tapi biasanya format package)
+    namespace 'com.vmeer.engine'
+    
     compileSdkVersion 34
-    ndkVersion "25.2.9519653" // Gunakan versi NDK yang terinstall di PC Anda
+    ndkVersion "25.2.9519653"
 
     defaultConfig {
         minSdkVersion 21
@@ -12,7 +15,7 @@ android {
             cmake {
                 cppFlags "-std=c++17 -Wall"
                 arguments "-DANDROID_STL=c++_shared"
-                abiFilters "arm64-v8a" // Fokus 64-bit untuk Android 14
+                abiFilters "arm64-v8a"
             }
         }
     }
@@ -20,6 +23,12 @@ android {
     externalNativeBuild {
         cmake {
             path "src/main/jni/CMakeLists.txt"
+        }
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
         }
     }
 }
