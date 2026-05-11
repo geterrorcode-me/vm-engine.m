@@ -78,3 +78,7 @@ target_link_libraries(egl_bridge ${log-lib} ${egl-lib})
 
 add_library(romfs_vm SHARED romfs_vm.cpp)
 target_link_libraries(romfs_vm ${log-lib})
+
+# H. Daemon
+add_executable(vmeerd vmeerd.cpp)
+target_link_libraries(vmeerd ${log-lib})

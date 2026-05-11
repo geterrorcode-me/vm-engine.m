@@ -1,23 +1,26 @@
 #include "include/vm_internal.h"
 #include "bridge/hook_bridge.h"
 
-// --- FORWARD DECLARATION ---
-// Ini menggantikan #include "Parcel.h"
-// Compiler tidak akan komplain lagi soal file missing
+// Forward Declaration untuk Parcel
 namespace android {
-    class Parcel; 
+    class Parcel;
 }
 
 using namespace android;
 
-// Pointer untuk menyimpan fungsi asli
 typedef int (*transact_t)(void*, uint32_t, Parcel*, Parcel*, uint32_t);
 static transact_t orig_transact = nullptr;
 
-// Fungsi pengganti (Proxy)
+// Proxy untuk membelokkan komunikasi AMS/PMS
 extern "C" int proxy_transact(void* ipc_state, uint32_t code, Parcel* data, Parcel* reply, uint32_t flags) {
-    // Di sini kita bisa memantau transaksi binder tanpa perlu tahu isi class Parcel secara detail
-    // LOGI("vMeer: Transact intercepted, code: %u", code);
+    
+    // Urutan 3: Binder Interception
+    // Code 1 biasanya adalah GET_SERVICE_TRANSACTION pada IServiceManager
+    if (code == 1) {
+        // Di sini kita bisa mengintip Parcel 'data' untuk melihat nama service.
+        // Jika request "activity" atau "package", kita bisa memalsukan 'reply'.
+        // LOGI("vMeer: Mencegat request ServiceManager");
+    }
 
     if (orig_transact) {
         return orig_transact(ipc_state, code, data, reply, flags);
@@ -26,8 +29,6 @@ extern "C" int proxy_transact(void* ipc_state, uint32_t code, Parcel* data, Parc
 }
 
 void init_binder_isolation() {
-    // Melakukan hook menggunakan ShadowHook melalui HookBridge
-    // Nama simbol ini untuk Android 14+ (arm64)
     orig_transact = (transact_t)vmeer::HookBridge::hookSymbol(
         "libbinder.so",
         "_ZN7android14IPCThreadState8transactEjRKNS_6ParcelEPS1_j",
@@ -35,8 +36,6 @@ void init_binder_isolation() {
     );
     
     if(orig_transact) {
-        LOGI("vMeer: Binder isolation active.");
-    } else {
-        LOGE("vMeer: Failed to hook Binder! Check symbol name.");
+        LOGI("vMeer: Binder Isolation Active (Urutan 3)");
     }
 }
