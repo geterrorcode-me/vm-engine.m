@@ -1,27 +1,33 @@
 #include "include/vm_internal.h"
 #include "bridge/hook_bridge.h"
-#include "Parcel.h" 
+
+// --- FORWARD DECLARATION ---
+// Ini menggantikan #include "Parcel.h"
+// Compiler tidak akan komplain lagi soal file missing
+namespace android {
+    class Parcel; 
+}
 
 using namespace android;
 
-// Simbol asli transact (Mangled Name untuk Android 14)
-typedef int (*transact_t)(void*, uint32_t, void*, void*, uint32_t);
+// Pointer untuk menyimpan fungsi asli
+typedef int (*transact_t)(void*, uint32_t, Parcel*, Parcel*, uint32_t);
 static transact_t orig_transact = nullptr;
 
+// Fungsi pengganti (Proxy)
 extern "C" int proxy_transact(void* ipc_state, uint32_t code, Parcel* data, Parcel* reply, uint32_t flags) {
-    if (data != nullptr) {
-        // --- TAHAP 1: IDENTITY REWRITE ---
-        // Logika untuk mendeteksi AttributionSource dan UID
-        // Kita bisa mengintip Parcel di sini sebelum dikirim ke Kernel
-        // LOGI("vMeer: Intercepted Transact Code: %u", code);
-    }
+    // Di sini kita bisa memantau transaksi binder tanpa perlu tahu isi class Parcel secara detail
+    // LOGI("vMeer: Transact intercepted, code: %u", code);
 
-    // Forward ke fungsi asli
-    return orig_transact(ipc_state, code, data, reply, flags);
+    if (orig_transact) {
+        return orig_transact(ipc_state, code, data, reply, flags);
+    }
+    return -1;
 }
 
 void init_binder_isolation() {
-    // Hook pada IPCThreadState::transact
+    // Melakukan hook menggunakan ShadowHook melalui HookBridge
+    // Nama simbol ini untuk Android 14+ (arm64)
     orig_transact = (transact_t)vmeer::HookBridge::hookSymbol(
         "libbinder.so",
         "_ZN7android14IPCThreadState8transactEjRKNS_6ParcelEPS1_j",
@@ -29,6 +35,8 @@ void init_binder_isolation() {
     );
     
     if(orig_transact) {
-        LOGI("vMeer: Binder Boundary Hook Active (ShadowHook)");
+        LOGI("vMeer: Binder isolation active.");
+    } else {
+        LOGE("vMeer: Failed to hook Binder! Check symbol name.");
     }
 }
