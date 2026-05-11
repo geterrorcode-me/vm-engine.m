@@ -13,16 +13,20 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          # Baris di bawah ini otomatis menangani lisensi Android SDK
+          cache: 'gradle'
 
-      - name: Accept Android Licenses
-        run: yes | sdkmanager --licenses
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Build vMeer AAR
+        # Kita gunakan --no-daemon agar lebih stabil di CI
         run: |
           chmod +x gradlew
-          ./gradlew :vmeer-module:assembleRelease
+          ./gradlew :vmeer-module:assembleRelease --no-daemon
 
       - name: Upload AAR Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vmeer-engine-modular
