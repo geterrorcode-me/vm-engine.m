@@ -2,54 +2,67 @@
 #include <android/log.h>
 #include <stdint.h>
 #include <dlfcn.h>
-#include "shadowhook.h"
+#include <unistd.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stdio.h>
 
-// Include modul-modul vMeer yang sudah kita buat
-#include "include/vmeer_stealth.h"
-#include "include/binder_vm.h"
-#include "include/vmeer_system.h"
-#include "include/egl_bridge.h"
+#include "shadowhook.h"
+#include "vmeer_stealth.h"    // Tanpa prefix include/
+#include "binder_vm.h"       // Tanpa prefix include/
+#include "vmeer_system.h"    // Tanpa prefix include/
+#include "egl_bridge.h"      // Tanpa prefix include/
 
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Forward declaration untuk fungsi requestNamespaceSetup yang sudah kamu buat
-bool requestNamespaceSetup(const char* pkgName);
+// Bungkus dalam extern "C" agar Linker tidak bingung
+extern "C" {
 
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
-    LOGI("vMeer Engine: === GLOBAL BOOT SEQUENCE START ===");
+bool requestNamespaceSetup(const char* pkgName) {
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0) return false;
 
-    // 1. DAEMON & NAMESPACE (Urutan #1)
-    // Meminta vmeerd menyiapkan sandbox filesystem
-    if (!requestNamespaceSetup("com.target.app")) { 
-        LOGE("vMeer Engine: Namespace Isolation Failed!");
-        // return JNI_ERR; // Opsional: tetap lanjut atau stop jika gagal
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0'; 
+    strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
+
+    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s", pkgName);
+        if (send(sock, cmd, strlen(cmd), 0) > 0) {
+            char response[16] = {0};
+            if (recv(sock, response, sizeof(response), 0) > 0) {
+                if (strcmp(response, "OK") == 0) {
+                    close(sock);
+                    return true;
+                }
+            }
+        }
+    }
+    close(sock);
+    return false;
+}
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
+    LOGI("vMeer Engine: Booting...");
+
+    if (!requestNamespaceSetup("com.vmeer.virtual.guest")) {
+        LOGI("vMeer Engine: Namespace setup failed, but continuing...");
     }
 
-    // 2. SHADOWHOOK INIT (Urutan #2)
-    // Dasar dari semua sistem interceptor kita
-    if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
-        LOGE("vMeer Engine: ShadowHook init failed!");
-        return JNI_ERR;
-    }
+    if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) return JNI_ERR;
 
-    // 3. STEALTH MODE (Urutan #3)
-    // Langsung menghilang dari /proc/self/maps sebelum discan
+    // Panggil semua modul
     init_vmeer_stealth();
-
-    // 4. BINDER VIRTUALIZATION & UID SPOOFING (Urutan #4)
-    // Menjalankan Handle Registry dan IPC Interceptor
     start_binder_proxy();
-
-    // 5. VIRTUAL SYSTEM SERVICES (Urutan #5)
-    // Menjalankan VAMS/VPMS palsu
     start_virtual_system_services();
-
-    // 6. GRAPHICS PRESENTATION BRIDGE (Urutan #6)
-    // Interupsi pada eglSwapBuffers
     start_egl_bridge();
 
-    LOGI("vMeer Engine: === ALL SYSTEMS NOMINAL [100%%] ===");
     return JNI_VERSION_1_6;
 }
+
+} // extern "C"
