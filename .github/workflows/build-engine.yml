@@ -13,14 +13,14 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # Baris di bawah ini otomatis menangani lisensi Android SDK
           cache: 'gradle'
 
-      - name: Set up Android SDK
+      # Ini adalah pengganti sdkmanager manual. 
+      # Dia akan menyiapkan SDK dan menyetujui lisensi otomatis.
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Build vMeer AAR
-        # Kita gunakan --no-daemon agar lebih stabil di CI
         run: |
           chmod +x gradlew
           ./gradlew :vmeer-module:assembleRelease --no-daemon
