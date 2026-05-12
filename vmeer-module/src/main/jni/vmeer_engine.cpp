@@ -17,6 +17,7 @@
 #include "include/vmeer_helper.h"    // Multi-process Sync
 #include "include/vmeer_zygote.h"    // Zygote Hooking
 #include "include/vmeer_context.h"   // Runtime State
+#include "include/vmeer_vfs.h"       // [NEW] Virtual File System & Stealth
 
 // --- Logic Modules ---
 #include "binder_engine.h"           // Virtual AMS & WMS
@@ -69,10 +70,11 @@ bool requestNamespaceSetup(const char* pkgName) {
 /**
  * setupVM:
  * JNI Bridge utama yang dipanggil oleh App Host (Java)
- * Memberikan perintah untuk menyuntikkan mirror.jar dan mengatur identitas VM.
  */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
+    (void)clazz; // Hilangkan warning unused
+    
     LOGI("====================================================");
     LOGI("   vMeer OS: Configuring High-End Virtual Machine   ");
     LOGI("====================================================");
@@ -104,6 +106,7 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
  * Mempersiapkan mesin sebelum aplikasi guest mengambil kendali penuh.
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
+    (void)res;
     JNIEnv* env;
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
 
@@ -133,12 +136,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     start_egl_bridge();                // GPU Vendor Spoofing
     vmeer::sensor::InitHooks();        // Hardware Jitter
 
+    // 6. [NEW] VFS Engine Activation (Redirection + Ghost + Scrubber)
+    vmeer::vfs::StartVFSEngine();
+
     LOGI("vMeer Engine: Standby - Awaiting setupVM(context, path, vuid)");
     
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
+    (void)vm; (void)reserved;
     LOGI("vMeer Engine: Engine Detached.");
 }
 
