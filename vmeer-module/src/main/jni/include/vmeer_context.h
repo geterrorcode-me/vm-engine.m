@@ -5,9 +5,15 @@
 #include <map>
 #include <mutex>
 
+// Melindungi akses ke Virtual Package Manager
+#include "vmeer_pms.h" 
+
 namespace vmeer {
 
-// Definisi struktur yang dicari oleh .cpp
+/**
+ * VirtualIdentity:
+ * Menyimpan metadata identitas setiap proses yang berjalan di dalam sandbox.
+ */
 struct VirtualIdentity {
     std::string package_name;
     int virtual_uid;
@@ -17,30 +23,58 @@ struct VirtualIdentity {
 
 class RuntimeContext {
 public:
+    /**
+     * Singleton Pattern:
+     * Memastikan hanya ada satu instance context di seluruh lifecycle engine.
+     */
     static RuntimeContext& Get() {
         static RuntimeContext instance;
         return instance;
     }
 
-    // Public Methods
+    // --- Core Methods ---
     bool Initialize(const std::string& vm_id, const std::string& target_pkg);
+    void Heartbeat(); 
+    
+    /**
+     * Package:
+     * Mengembalikan referensi ke Virtual PMS untuk manajemen manifest & permissions.
+     */
+    pms::PMSRuntime& Package();
+
+    // --- Registry & Zygote Support ---
     void RegisterVirtualApp(const std::string& pkg, int v_uid);
     VirtualIdentity* GetIdentity(const std::string& proc_name);
-    void Heartbeat();
 
-    // High-End Setters untuk VM
-    void SetVirtualUid(int uid) { m_vuid = uid; }
-    void SetMirrorPath(const std::string& path) { m_mirror_path = path; }
+    // --- High-End VM Setters (Digunakan oleh setupVM) ---
+    void SetVirtualUid(int uid) { 
+        std::lock_guard<std::mutex> lock(registry_mutex_);
+        m_vuid = uid; 
+    }
+    
+    void SetMirrorPath(const std::string& path) { 
+        std::lock_guard<std::mutex> lock(registry_mutex_);
+        m_mirror_path = path; 
+    }
 
-    // Getters
+    // --- Getters ---
+    int GetVirtualUid() const { return m_vuid; }
+    std::string GetMirrorPath() const { return m_mirror_path; }
     std::string GetTargetPackage() const { return m_target_package; }
     std::string GetVAndroidId() const { return m_v_android_id; }
-    int GetVirtualUid() const { return m_vuid; }
+    std::string GetMasterSeed() const { return m_master_seed; }
 
 private:
-    RuntimeContext() : m_vuid(0), m_master_seed("vmeer_seed_default") {}
+    /**
+     * Constructor:
+     * Urutan inisialisasi disesuaikan dengan urutan deklarasi variabel di bawah
+     * untuk mencegah warning -Wreorder-ctor.
+     */
+    RuntimeContext() 
+        : m_master_seed("vmeer_default_seed_8888"),
+          m_vuid(0) {}
 
-    // Member Variables yang dibutuhkan oleh vmeer_context.cpp
+    // Variabel Identitas (Sesuai urutan inisialisasi)
     std::string m_vm_id;
     std::string m_target_package;
     std::string m_v_android_id;
@@ -48,11 +82,11 @@ private:
     std::string m_mirror_path;
     int m_vuid;
 
-    // Registry & Mutex (Penyebab utama error build tadi)
+    // Registry Management
     std::map<std::string, VirtualIdentity> registry_;
     std::mutex registry_mutex_;
 };
 
 } // namespace vmeer
 
-#endif
+#endif // VMEER_CONTEXT_H
