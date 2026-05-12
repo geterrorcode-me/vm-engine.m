@@ -70,11 +70,41 @@
         },
         "start": {
           "column": 0,
-          "index": 4891,
-          "line": 145
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_context.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 891,
+          "line": 39
+        },
+        "start": {
+          "column": 0,
+          "index": 891,
+          "line": 39
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/binder_engine.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 260,
+          "line": 15
+        },
+        "start": {
+          "column": 0,
+          "index": 260,
+          "line": 15
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/binder_engine.h"
 }
