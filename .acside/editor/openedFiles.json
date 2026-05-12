@@ -20,13 +20,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1580,
-          "line": 51
+          "index": 3676,
+          "line": 116
         },
         "start": {
           "column": 0,
-          "index": 1580,
-          "line": 51
+          "index": 3676,
+          "line": 116
         }
       }
     },
@@ -74,7 +74,37 @@
           "line": 30
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_db.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1048,
+          "line": 46
+        },
+        "start": {
+          "column": 0,
+          "index": 1048,
+          "line": 46
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/sensor_engine.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 705,
+          "line": 31
+        },
+        "start": {
+          "column": 0,
+          "index": 705,
+          "line": 31
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/pms_runtime.h"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }
