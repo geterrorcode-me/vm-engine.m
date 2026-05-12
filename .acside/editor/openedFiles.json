@@ -124,14 +124,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_vfs.cpp",
       "selection": {
         "end": {
-          "column": 24,
-          "index": 4246,
-          "line": 113
+          "column": 0,
+          "index": 4877,
+          "line": 132
         },
         "start": {
-          "column": 24,
-          "index": 4246,
-          "line": 113
+          "column": 0,
+          "index": 4877,
+          "line": 132
         }
       }
     },
