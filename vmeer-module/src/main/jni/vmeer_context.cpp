@@ -1,6 +1,6 @@
-#include "vmeer_context.h"
+#include "include/vmeer_context.h" // Gunakan path yang benar
 #include "vmeer_db.h"
-#include "vmeer_pms.h" // Include baru
+#include "vmeer_pms.h"
 #include <android/log.h>
 
 #define LOG_TAG "vMeer_Context"
@@ -9,28 +9,28 @@
 namespace vmeer {
 
 bool RuntimeContext::Initialize(const char* vm_id, const char* target_pkg) {
+    if (!vm_id || !target_pkg) return false;
+
     m_vm_id = vm_id;
     m_target_package = target_pkg;
 
-    // 1. Inisialisasi Database
+    // Inisialisasi Database
     std::string db_path = "/data/data/" + m_target_package + "/vmeer_core.db";
     if (!init_vmeer_database(db_path.c_str())) {
+        LOGI("vMeer: Database init failed");
         return false;
     }
 
-    // 2. Load Identity
+    // Ambil Android ID Virtual
     m_v_android_id = get_v_android_id_c(target_pkg);
 
-    // 3. Bangun Virtual Package Ecosystem
-    // Simulasi: Daftarkan paket target ke dalam ekosistem virtual
-    // Di masa depan, ini akan memuat daftar dari DB
-    pms::PMSRuntime::Get().RegisterPackage(target_pkg, 10000 + (rand() % 1000));
+    // Registrasi ke Virtual Ecosystem
+    pms::PMSRuntime::Get().RegisterPackage(target_pkg, 10000);
 
     LOGI("vMeer: [Context] System initialized for %s", target_pkg);
     return true;
 }
 
-// Tambahkan getter untuk akses mudah ke PMS
 pms::PMSRuntime& RuntimeContext::Package() {
     return pms::PMSRuntime::Get();
 }

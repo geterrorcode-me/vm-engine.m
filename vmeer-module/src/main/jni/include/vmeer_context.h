@@ -2,32 +2,30 @@
 #define VMEER_CONTEXT_H
 
 #include <string>
-#include <vector>
-#include <memory>
+#include "vmeer_pms.h"
 
 namespace vmeer {
 
 class RuntimeContext {
 public:
-    static RuntimeContext& Get();
+    static RuntimeContext& Get() {
+        static RuntimeContext instance;
+        return instance;
+    }
 
-    // Lifecycle
-    bool Initialize(const std::string& vm_id, const std::string& pkg_name);
-    void Heartbeat();
+    // Tambahkan deklarasi ini agar match dengan .cpp
+    bool Initialize(const char* vm_id, const char* target_pkg);
+    pms::PMSRuntime& Package();
 
-    // State Accessors (Data Only)
-    std::string GetAndroidId();
-    std::string GetImei();
-    const std::vector<uint8_t>& GetMasterSeed();
-    int64_t GetTotalUptime();
-    int GetBatteryCycles();
+    // Member variables
+    std::string GetTargetPackage() const { return m_target_package; }
+    std::string GetVAndroidId() const { return m_v_android_id; }
 
 private:
-    RuntimeContext();
-    ~RuntimeContext();
-    
-    struct Impl;
-    std::unique_ptr<Impl> pimpl;
+    RuntimeContext() = default;
+    std::string m_vm_id;
+    std::string m_target_package;
+    std::string m_v_android_id;
 };
 
 } // namespace vmeer
