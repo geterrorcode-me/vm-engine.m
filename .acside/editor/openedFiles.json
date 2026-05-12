@@ -79,14 +79,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_context.h",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 1361,
-          "line": 54
+          "column": 29,
+          "index": 306,
+          "line": 15
         },
         "start": {
-          "column": 0,
-          "index": 1361,
-          "line": 54
+          "column": 29,
+          "index": 306,
+          "line": 15
         }
       }
     },
@@ -95,12 +95,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1346,
+          "index": 1395,
           "line": 46
         },
         "start": {
           "column": 0,
-          "index": 1346,
+          "index": 1395,
           "line": 46
         }
       }

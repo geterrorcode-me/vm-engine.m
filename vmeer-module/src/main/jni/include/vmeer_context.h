@@ -13,6 +13,7 @@ struct VirtualIdentity {
     std::string package_name;
     int virtual_uid;
     bool is_isolated;
+    bool use_virtual_storage;
 };
 
 class RuntimeContext {
