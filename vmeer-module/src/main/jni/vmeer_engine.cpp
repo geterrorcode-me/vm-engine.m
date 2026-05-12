@@ -7,25 +7,27 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdio.h>
+#include <string>
 
 // --- Core Engine & Stealth ---
 #include "shadowhook.h"
 #include "vmeer_stealth.h"
 
-// --- Ecosystem Modules (Pilar Baru) ---
-#include "include/vmeer_helper.h"    // Multi-process Sync & Shared Memory
-#include "include/vmeer_zygote.h"    // Zygote: nativeForkAndSpecialize
-#include "include/vmeer_context.h"   // Runtime State (Android ID, Seed, etc)
+// --- Ecosystem Modules ---
+#include "include/vmeer_helper.h"    // Multi-process Sync
+#include "include/vmeer_zygote.h"    // Zygote Hooking
+#include "include/vmeer_context.h"   // Runtime State
 
-// --- Logic Modules (Virtual Services) ---
-#include "binder_engine.h"           // Virtual AMS & Identity Spoofing
-#include "sensor_engine.h"           // Sensor Noise & Jitter
-#include "vmeer_pms.h"             // Virtual Package Ecosystem
-#include "egl_bridge.h"              // Graphics/GPU Vendor Virtualization
+// --- Logic Modules ---
+#include "binder_engine.h"           // Virtual AMS & WMS
+#include "sensor_engine.h"           // Sensor Jitter
+#include "vmeer_pms.h"               // Virtual Package Manager
+#include "egl_bridge.h"              // GPU Virtualization
+#include "vmeer_system.h"            // Property Spoofing
 
-// --- Legacy & Bridge ---
-#include "binder_vm.h"               // Low-level Binder Hook Bridge
-#include "vmeer_system.h"            // System Property Spoofing
+// --- ART VM Bridge ---
+extern "C" void init_art_hook(JNIEnv* env);
+extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
 
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -35,7 +37,7 @@ extern "C" {
 
 /**
  * requestNamespaceSetup:
- * Mengatur isolated storage dan sandboxing melalui Unix Domain Socket ke Daemon vmeerd.
+ * Menghubungi vmeerd untuk isolasi filesystem (Mount Namespace).
  */
 bool requestNamespaceSetup(const char* pkgName) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -44,7 +46,6 @@ bool requestNamespaceSetup(const char* pkgName) {
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    // Abstract socket address
     addr.sun_path[0] = '\0'; 
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
@@ -66,77 +67,79 @@ bool requestNamespaceSetup(const char* pkgName) {
 }
 
 /**
+ * setupVM:
+ * JNI Bridge utama yang dipanggil oleh App Host (Java)
+ * Memberikan perintah untuk menyuntikkan mirror.jar dan mengatur identitas VM.
+ */
+JNIEXPORT void JNICALL
+Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
+    LOGI("====================================================");
+    LOGI("   vMeer OS: Configuring High-End Virtual Machine   ");
+    LOGI("====================================================");
+
+    const char *path = env->GetStringUTFChars(mirrorPath, nullptr);
+    
+    // 1. Dapatkan ClassLoader dari Context aplikasi guest
+    jclass context_clazz = env->GetObjectClass(context);
+    jmethodID get_class_loader_mid = env->GetMethodID(context_clazz, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
+
+    // 2. Bypass Hidden API (Buka gerbang sistem)
+    init_art_hook(env);
+
+    // 3. Suntikkan mirror.jar ke ClassLoader (Priority Loading)
+    perform_mirror_injection(env, class_loader, path);
+
+    // 4. Update Runtime Context (vUID & Config)
+    auto& vContext = vmeer::RuntimeContext::Get();
+    vContext.SetVirtualUid(vUid);
+    vContext.SetMirrorPath(path);
+
+    env->ReleaseStringUTFChars(mirrorPath, path);
+    LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
+}
+
+/**
  * JNI_OnLoad:
- * Entry point utama. Di sini seluruh komponen ekosistem dibangunkan.
+ * Mempersiapkan mesin sebelum aplikasi guest mengambil kendali penuh.
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
-    LOGI("====================================================");
-    LOGI("   vMeer OS Engine: Initializing Virtual Ecosystem  ");
-    LOGI("====================================================");
+    JNIEnv* env;
+    if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
 
-    // 1. STEALTH PHASE: 
-    // Menyembunyikan jejak library dari memory maps sebelum engine aktif.
+    LOGI("vMeer Engine: Initializing Core Systems...");
+
+    // 1. Stealth & Hooking Engine
     init_vmeer_stealth();
-
-    // 2. CORE HOOKING ENGINE:
-    // Inisialisasi ShadowHook untuk memanipulasi fungsi sistem.
     if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
-        LOGE("Critical: ShadowHook initialization failed!");
+        LOGE("Critical: ShadowHook failed!");
         return JNI_ERR;
     }
 
-    // 3. HELPER & SYNC PHASE (Pilar Baru):
-    // Menghubungkan ke Shared Memory agar data antar proses virtual tetap sinkron 
-    // tanpa menyebabkan SQLite database locked.
-    if (!vmeer::helper::ConnectSharedState()) {
-        LOGI("Warning: Shared Memory sync unavailable. Falling back to direct DB.");
-    }
+    // 2. Multi-process Synchronization
+    vmeer::helper::ConnectSharedState();
 
-    // 4. ENVIRONMENT SETUP:
-    const char* target_pkg = "com.vmeer.virtual.guest"; // Default isolated package
-    if (!requestNamespaceSetup(target_pkg)) {
-        LOGI("Warning: Namespace setup failed. Storage isolation might be limited.");
-    }
+    // 3. Storage Namespace Isolation
+    const char* default_pkg = "com.vmeer.guest";
+    requestNamespaceSetup(default_pkg);
 
-    // 5. RUNTIME CONTEXT (VRCE):
-    // Memuat identitas virtual (Android ID, Serial, IMEI) dari database.
-    if (!vmeer::RuntimeContext::Get().Initialize("vm_001", target_pkg)) {
-        LOGE("Critical: Failed to load Virtual Context!");
-        return JNI_ERR;
-    }
-
-    // 6. ZYGOTE EVOLUTION (Pilar Baru):
-    // Melakukan hook pada proses kelahiran (fork) agar sandbox aktif sejak awal.
+    // 4. Zygote Evolution (Hooking fork untuk sandbox)
     vmeer::zygote::HookForkAndSpecialize();
 
-    // 7. MODULES ACTIVATION (Virtual Services):
-    LOGI("vMeer Engine: Activating Virtual Service Layers...");
-    
-    // Virtual AMS & Binder Ecosystem
-    start_binder_proxy();              
-    vmeer::binder::InitHooks();        
-    
-    // System & Graphics Virtualization
-    start_virtual_system_services();   
-    start_egl_bridge();                
-    
-    // Hardware Jitter & Sensors
-    vmeer::sensor::InitHooks();        
+    // 5. Activation of Service Layers
+    start_binder_proxy();              // Virtual AMS/WMS
+    vmeer::binder::InitHooks();        // Binder Interceptor
+    start_virtual_system_services();   // System Property Spoofing
+    start_egl_bridge();                // GPU Vendor Spoofing
+    vmeer::sensor::InitHooks();        // Hardware Jitter
 
-    LOGI("====================================================");
-    LOGI("   vMeer Ecosystem is now LIVE and Isolated.        ");
-    LOGI("====================================================");
+    LOGI("vMeer Engine: Standby - Awaiting setupVM(context, path, vuid)");
     
     return JNI_VERSION_1_6;
 }
 
-/**
- * JNI_OnUnload:
- * Sinkronisasi terakhir sebelum library dilepas.
- */
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
-    LOGI("vMeer Engine: Finalizing state synchronization...");
-    vmeer::RuntimeContext::Get().Heartbeat(); 
+    LOGI("vMeer Engine: Engine Detached.");
 }
 
 } // extern "C"

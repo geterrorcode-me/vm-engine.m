@@ -39,6 +39,7 @@ set(VMEER_SOURCES
     vmeer_system.cpp
     vmeer_helper.cpp
     vmeer_zygote.cpp
+    art_vm.cpp
 )
 
 # Build Library Utama
