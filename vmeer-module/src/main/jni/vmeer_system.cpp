@@ -46,7 +46,7 @@ int hook_system_property_get(const char* name, char* value) {
     }
 
     // Jika bukan properti yang kita spoof, panggil fungsi asli libc
-    return ((orig_sys_get_t)shadowhook_get_prev_stack(reinterpret_cast<void*>(hook_system_property_get)))(name, value);
+    return ((orig_sys_get_t)shadowhook_get_prev_func(reinterpret_cast<void*>(hook_system_property_get)))(name, value);
 }
 
 /**
@@ -55,7 +55,7 @@ int hook_system_property_get(const char* name, char* value) {
  */
 void start_virtual_system_services() {
     // Hook __system_property_get di libc.so (Gerbang utama properti sistem)
-    shadowhook_hook_symname("libc.so", "__system_property_get", (void*)hook_system_property_get, nullptr);
+    shadowhook_hook_sym_name("libc.so", "__system_property_get", (void*)hook_system_property_get, nullptr);
     LOGI("vMeer System: Property Spoofing LIVE (Stealth Mode Active).");
 }
 

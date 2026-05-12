@@ -46,13 +46,13 @@ std::string RedirectPath(const char* original) {
 typedef int (*orig_openat_t)(int, const char*, int, mode_t);
 int hook_openat(int dirfd, const char* pathname, int flags, mode_t mode) {
     std::string v_path = RedirectPath(pathname);
-    return ((orig_openat_t)shadowhook_get_prev_stack(reinterpret_cast<void*>(hook_openat)))(dirfd, v_path.c_str(), flags, mode);
+    return ((orig_openat_t)shadowhook_get_prev_func(reinterpret_cast<void*>(hook_openat)))(dirfd, v_path.c_str(), flags, mode);
 }
 
 // --- [HOOK] GetDents64 (Ghost Directory) ---
 typedef int (*orig_getdents64_t)(unsigned int, struct dirent64*, unsigned int);
 int hook_getdents64(unsigned int fd, struct dirent64* dirp, unsigned int count) {
-    int nread = ((orig_getdents64_t)shadowhook_get_prev_stack(reinterpret_cast<void*>(hook_getdents64)))(fd, dirp, count);
+    int nread = ((orig_getdents64_t)shadowhook_get_prev_func(reinterpret_cast<void*>(hook_getdents64)))(fd, dirp, count);
     if (nread <= 0) return nread;
 
     int bpos = 0;
@@ -73,7 +73,7 @@ int hook_getdents64(unsigned int fd, struct dirent64* dirp, unsigned int count) 
 // --- [HOOK] Read (Maps Scrubber) ---
 typedef ssize_t (*orig_read_t)(int, void*, size_t);
 ssize_t hook_read(int fd, void* buf, size_t count) {
-    ssize_t res = ((orig_read_t)shadowhook_get_prev_stack(reinterpret_cast<void*>(hook_read)))(fd, buf, count);
+    ssize_t res = ((orig_read_t)shadowhook_get_prev_func(reinterpret_cast<void*>(hook_read)))(fd, buf, count);
     if (res <= 0) return res;
 
     char path[PATH_MAX];
@@ -108,10 +108,10 @@ char* hook_getenv(const char* name) {
 }
 
 void StartVFSEngine() {
-    shadowhook_hook_symname("libc.so", "openat", (void*)hook_openat, nullptr);
-    shadowhook_hook_symname("libc.so", "__getdents64", (void*)hook_getdents64, nullptr);
-    shadowhook_hook_symname("libc.so", "read", (void*)hook_read, nullptr);
-    shadowhook_hook_symname("libc.so", "getenv", (void*)hook_getenv, nullptr);
+    shadowhook_hook_sym_name("libc.so", "openat", (void*)hook_openat, nullptr);
+    shadowhook_hook_sym_name("libc.so", "__getdents64", (void*)hook_getdents64, nullptr);
+    shadowhook_hook_sym_name("libc.so", "read", (void*)hook_read, nullptr);
+    shadowhook_hook_sym_name("libc.so", "getenv", (void*)hook_getenv, nullptr);
     LOGI("vMeer VFS: Engine Activated.");
 }
 
