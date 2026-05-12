@@ -18,7 +18,7 @@
 namespace vmeer {
 namespace zygote {
 
-    // Tanda tangan fungsi native Zygote sesuai standar NDK/Android Runtime
+    // Signature native Zygote (Zygote64 support)
     typedef jint (*nativeForkAndSpecialize_t)(
         JNIEnv*, jclass, jint, jint, jintArray, jint, jobject, jint, 
         jstring, jstring, jintArray, jintArray, jboolean, jstring, 
@@ -27,7 +27,8 @@ namespace zygote {
     static nativeForkAndSpecialize_t orig_nativeForkAndSpecialize = nullptr;
 
     /**
-     * PROXY: Titik cegat kelahiran proses aplikasi.
+     * PROXY: Interupsi pada nativeForkAndSpecialize
+     * Tempat di mana "Virtual Ecosystem" dipaksakan pada proses baru.
      */
     jint proxy_nativeForkAndSpecialize(
         JNIEnv* env, jclass clazz, jint uid, jint gid, jintArray gids, jint runtime_flags,
@@ -37,52 +38,47 @@ namespace zygote {
         jobjectArray pkg_data_info_list, jobjectArray whitelisted_data_info_list,
         jboolean bind_mount_app_data_fp, jboolean bind_mount_app_storage_fp) {
 
-        // 1. Identifikasi nama paket sebelum fork
+        // 1. Dapatkan nama proses yang akan dijalankan
         const char* c_nice_name = env->GetStringUTFChars(nice_name, nullptr);
-        std::string pkg_name = (c_nice_name ? c_nice_name : "");
-        bool is_vmeer_app = (pkg_name.find("com.vmeer.virtual") != std::string::npos);
+        std::string current_proc = (c_nice_name ? c_nice_name : "");
+        
+        // 2. Tanya ke Registry Context apakah ini proses virtual
+        auto* v_ident = vmeer::RuntimeContext::Get().GetIdentity(current_proc);
 
-        // 2. Eksekusi Fork (Panggil fungsi asli)
+        // 3. Panggil fungsi asli untuk Forking
         jint pid = orig_nativeForkAndSpecialize(
             env, clazz, uid, gid, gids, runtime_flags, rlimits, mount_external, se_info, 
             nice_name, fds_to_close, fds_to_ignore, is_child_zygote, instruction_set, 
             app_data_dir, is_top_app, pkg_data_info_list, whitelisted_data_info_list, 
             bind_mount_app_data_fp, bind_mount_app_storage_fp);
 
-        // 3. LOGIKA ISOLASI (Hanya dieksekusi di proses anak yang baru lahir)
-        if (pid == 0 && is_vmeer_app) {
-            LOGI("vMeer Zygote: Child process [%s] detected. Orchestrating Sandbox...", pkg_name.c_str());
+        // 4. Tahap Spesialisasi (Hanya di proses anak / PID == 0)
+        if (pid == 0 && v_ident != nullptr) {
+            LOGI("vMeer Zygote: Starting Virtualization for [%s]", v_ident->package_name.c_str());
 
-            /**
-             * MOUNT NAMESPACE ISOLATION
-             * CLONE_NEWNS memisahkan tabel mount proses ini dari sistem.
-             */
+            // A. ISOLASI NAMESPACE (Pilar Storage)
             if (unshare(CLONE_NEWNS) == 0) {
-                // MS_PRIVATE memastikan perubahan mount di sini tidak "bocor" ke luar (GSI Safety)
-                if (mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0) {
-                    
-                    // Contoh: Mount folder virtual khusus untuk menimpa SDCard asli
-                    // Kita asumsikan daemon sudah menyiapkan folder di /data/vmeer/virtual_sd
-                    // mount("/data/vmeer/virtual_sd", "/sdcard", NULL, MS_BIND, NULL);
-                    
-                    LOGI("vMeer Zygote: Mount Namespace is now Private & Isolated.");
+                // MS_PRIVATE agar tidak merusak mount host (GSI Safety)
+                mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL);
+                
+                if (v_ident->use_virtual_storage) {
+                    LOGI("vMeer Zygote: Storage Namespace Detached.");
                 }
-            } else {
-                LOGE("vMeer Zygote: Failed to unshare namespace. Check SELinux permissions!");
             }
+
+            // B. ISOLASI IDENTITAS (Evolusi UID)
+            // Di sini kita bisa memanipulasi UID jika diperlukan: setuid(v_ident->virtual_uid);
         }
 
-        // Cleanup JNI string
         if (c_nice_name) env->ReleaseStringUTFChars(nice_name, c_nice_name);
-        
         return pid;
     }
 
     /**
-     * Entry point untuk memasang Hook pada libandroid_runtime.so
+     * Entry Point untuk mengaktifkan Hook Zygote
      */
     void HookForkAndSpecialize() {
-        LOGI("Zygote Engine: Searching for nativeForkAndSpecialize symbol...");
+        LOGI("Zygote Engine: Hooking into app_process / zygote64...");
 
         void* stub = shadowhook_hook_sym_name(
             "libandroid_runtime.so",
@@ -92,11 +88,9 @@ namespace zygote {
         );
 
         if (stub) {
-            LOGI("Zygote Engine: Hook installed successfully. System remains stable.");
+            LOGI("Zygote Engine: [nativeForkAndSpecialize] successfully intercepted.");
         } else {
-            int err_num = shadowhook_get_errno();
-            const char* err_msg = shadowhook_to_errmsg(err_num);
-            LOGE("Zygote Engine: Hook failed! Error %d: %s", err_num, err_msg);
+            LOGE("Zygote Engine: Hook failure! System isolation will be limited.");
         }
     }
 

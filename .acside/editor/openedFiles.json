@@ -65,13 +65,28 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 2407,
-          "line": 59
+          "index": 3929,
+          "line": 98
         },
         "start": {
           "column": 0,
-          "index": 2407,
-          "line": 59
+          "index": 3929,
+          "line": 98
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_context.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1532,
+          "line": 54
+        },
+        "start": {
+          "column": 0,
+          "index": 1532,
+          "line": 54
         }
       }
     }
