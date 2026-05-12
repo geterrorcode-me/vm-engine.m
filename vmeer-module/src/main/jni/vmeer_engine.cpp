@@ -13,10 +13,10 @@
 #include "vmeer_stealth.h"
 
 // Decoupled Modules
-#include "include/vmeer_context.h"
-#include "include/binder_engine.h"
-#include "include/sensor_engine.h"
-#include "include/pms_runtime.h"
+#include "binder_engine.h"
+#include "sensor_engine.h"
+#include "pms_runtime.h"
+#include "vmeer_context.h"
 
 // Legacy/Bridge Modules
 #include "binder_vm.h"

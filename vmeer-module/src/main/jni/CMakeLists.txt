@@ -50,6 +50,7 @@ target_link_libraries(vmeer_engine
     ${android-lib}
     ${egl-lib}
     ${gles-lib}
+    ${sqlite3-lib}
     sqlite3              # Database Engine
     crypto               # OpenSSL untuk HMAC/SHA256 (Deterministic Seed)
     atomic               # Penting untuk operasi thread-safe di ARM

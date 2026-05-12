@@ -1,5 +1,6 @@
 #include "include/vmeer_context.h"
 #include "include/pms_runtime.h" // Modul PMS
+#include "binder_engine.h"
 #include <jni.h>
 #include <android/log.h>
 #include <string>
