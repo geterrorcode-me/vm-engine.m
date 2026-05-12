@@ -1,46 +1,38 @@
-#include "include/vmeer_context.h"
-#include <sqlite3.h>
-#include <openssl/hmac.h>
-#include <chrono>
-#include <sstream>
-#include <iomanip>
+#include "vmeer_context.h"
+#include "vmeer_db.h"
+#include "vmeer_pms.h" // Include baru
+#include <android/log.h>
+
+#define LOG_TAG "vMeer_Context"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace vmeer {
 
-struct RuntimeContext::Impl {
-    std::string vm_id;
-    std::string pkg_name;
-    std::vector<uint8_t> master_seed;
-    int64_t total_uptime_sec = 0;
-    int battery_cycles = 0;
-    int64_t session_start_ts = 0;
-    sqlite3* db = nullptr;
-};
+bool RuntimeContext::Initialize(const char* vm_id, const char* target_pkg) {
+    m_vm_id = vm_id;
+    m_target_package = target_pkg;
 
-RuntimeContext& RuntimeContext::Get() {
-    static RuntimeContext instance;
-    return instance;
-}
+    // 1. Inisialisasi Database
+    std::string db_path = "/data/data/" + m_target_package + "/vmeer_core.db";
+    if (!init_vmeer_database(db_path.c_str())) {
+        return false;
+    }
 
-RuntimeContext::RuntimeContext() : pimpl(std::make_unique<Impl>()) {}
-RuntimeContext::~RuntimeContext() { if(pimpl->db) sqlite3_close(pimpl->db); }
+    // 2. Load Identity
+    m_v_android_id = get_v_android_id_c(target_pkg);
 
-bool RuntimeContext::Initialize(const std::string& vm_id, const std::string& pkg_name) {
-    pimpl->vm_id = vm_id;
-    pimpl->pkg_name = pkg_name;
-    
-    // Initialize DB & Load State (Simplified for brevity)
-    // sqlite3_open("/data/data/com.vmeer.virtual/vmeer.db", &pimpl->db);
-    
-    pimpl->session_start_ts = std::chrono::system_clock::now().time_since_epoch().count() / 1000000000;
+    // 3. Bangun Virtual Package Ecosystem
+    // Simulasi: Daftarkan paket target ke dalam ekosistem virtual
+    // Di masa depan, ini akan memuat daftar dari DB
+    pms::PMSRuntime::Get().RegisterPackage(target_pkg, 10000 + (rand() % 1000));
+
+    LOGI("vMeer: [Context] System initialized for %s", target_pkg);
     return true;
 }
 
-std::string RuntimeContext::GetAndroidId() {
-    // Deterministic derivation logic here
-    return "v_android_id_derived_from_seed";
+// Tambahkan getter untuk akses mudah ke PMS
+pms::PMSRuntime& RuntimeContext::Package() {
+    return pms::PMSRuntime::Get();
 }
-
-int GetBatteryCycles() { return RuntimeContext::Get().GetBatteryCycles(); }
 
 } // namespace vmeer

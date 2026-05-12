@@ -25,6 +25,7 @@ set(VMEER_SOURCES
     vmeer_core.cpp
     vmeer_context.cpp
     vmeer_db.cpp
+    vmeer_pms.cpp
     binder_engine.cpp
     sensor_engine.cpp
     pms_runtime.cpp
