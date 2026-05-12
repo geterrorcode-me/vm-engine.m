@@ -3,52 +3,52 @@
 
 #include <string>
 #include <map>
-#include <vector>
 #include <mutex>
+#include "vmeer_pms.h"
 
 namespace vmeer {
 
-    // Struktur Data untuk Identitas Virtual proses
-    struct VirtualIdentity {
-        std::string package_name;
-        std::string virtual_process_name;
-        int virtual_uid;
-        bool is_isolated;
-        bool use_virtual_storage;
-    };
+// Struktur Identitas untuk Registry
+struct VirtualIdentity {
+    std::string package_name;
+    int virtual_uid;
+    bool is_isolated;
+};
 
-    class RuntimeContext {
-    public:
-        // Singleton Pattern
-        static RuntimeContext& Get() {
-            static RuntimeContext instance;
-            return instance;
-        }
+class RuntimeContext {
+public:
+    static RuntimeContext& Get() {
+        static RuntimeContext instance;
+        return instance;
+    }
 
-        // Inisialisasi Environment
-        bool Initialize(const std::string& vm_id, const std::string& target_pkg);
+    // Fungsi Utama (Tipe data diselaraskan dengan .cpp)
+    bool Initialize(const std::string& vm_id, const std::string& target_pkg);
+    void Heartbeat(); 
+    pms::PMSRuntime& Package();
 
-        // Registry Management (Evolusi String Descriptor)
-        void RegisterVirtualApp(const std::string& pkg, int v_uid);
-        bool IsVirtualProcess(const std::string& proc_name);
-        VirtualIdentity* GetIdentity(const std::string& proc_name);
+    // Registry Access untuk Zygote
+    void RegisterVirtualApp(const std::string& pkg, int v_uid);
+    VirtualIdentity* GetIdentity(const std::string& proc_name);
 
-        // Virtual Peripherals (Android ID, etc)
-        std::string GetVAndroidId() const { return v_android_id_; }
-        void Heartbeat(); // Sync ke SQLite
+    // Getters
+    std::string GetTargetPackage() const { return m_target_package; }
+    std::string GetVAndroidId() const { return m_v_android_id; }
+    std::string GetMasterSeed() const { return m_master_seed; }
 
-    private:
-        RuntimeContext() = default;
-        std::map<std::string, VirtualIdentity> registry_;
-        std::string v_android_id_;
-        std::string master_seed_;
-        mutable std::mutex registry_mutex_;
+private:
+    RuntimeContext() : m_master_seed("vmeer_default_seed_8888") {}
+    
+    std::string m_vm_id;
+    std::string m_target_package;
+    std::string m_v_android_id;
+    std::string m_master_seed;
 
-        // Prevent copying
-        RuntimeContext(const RuntimeContext&) = delete;
-        void operator=(const RuntimeContext&) = delete;
-    };
+    // Registry untuk evolusi String Descriptor
+    std::map<std::string, VirtualIdentity> registry_;
+    std::mutex registry_mutex_;
+};
 
 } // namespace vmeer
 
-#endif // VMEER_CONTEXT_H
+#endif

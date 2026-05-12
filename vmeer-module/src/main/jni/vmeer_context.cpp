@@ -1,22 +1,46 @@
 #include "include/vmeer_context.h"
-#include "vmeer_db.h" // WAJIB: Agar fungsi init_vmeer_database dikenali
-#include "vmeer_pms.h"
 #include <android/log.h>
 
+#define LOG_TAG "vMeer_Context"
+
 namespace vmeer {
-bool RuntimeContext::Initialize(const char* vm_id, const char* target_pkg) {
-    if (!vm_id || !target_pkg) return false;
+
+bool RuntimeContext::Initialize(const std::string& vm_id, const std::string& target_pkg) {
+    std::lock_guard<std::mutex> lock(registry_mutex_);
+    
+    // Set variabel lama (supaya getter tidak null)
     m_vm_id = vm_id;
     m_target_package = target_pkg;
+    m_v_android_id = "v_aid_" + vm_id;
 
-    std::string db_path = "/data/data/" + m_target_package + "/vmeer_core.db";
-    if (!init_vmeer_database(db_path.c_str())) return false;
+    // Masukkan ke Registry baru untuk Zygote Hook
+    VirtualIdentity ident = {target_pkg, 20000, true};
+    registry_[target_pkg] = ident;
 
-    m_v_android_id = get_v_android_id_c(target_pkg);
-    pms::PMSRuntime::Get().RegisterPackage(target_pkg, 10000);
+    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "vMeer Context Reborn: %s", target_pkg.c_str());
     return true;
 }
 
-void RuntimeContext::Heartbeat() { /* Logic */ }
-pms::PMSRuntime& RuntimeContext::Package() { return pms::PMSRuntime::Get(); }
+void RuntimeContext::RegisterVirtualApp(const std::string& pkg, int v_uid) {
+    std::lock_guard<std::mutex> lock(registry_mutex_);
+    registry_[pkg] = {pkg, v_uid, true};
 }
+
+VirtualIdentity* RuntimeContext::GetIdentity(const std::string& proc_name) {
+    std::lock_guard<std::mutex> lock(registry_mutex_);
+    auto it = registry_.find(proc_name);
+    if (it != registry_.end()) {
+        return &(it->second);
+    }
+    return nullptr;
+}
+
+void RuntimeContext::Heartbeat() {
+    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Heartbeat: VM Process is Alive.");
+}
+
+pms::PMSRuntime& RuntimeContext::Package() { 
+    return pms::PMSRuntime::Get(); 
+}
+
+} // namespace vmeer
