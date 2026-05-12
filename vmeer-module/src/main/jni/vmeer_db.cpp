@@ -2,7 +2,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <android/log.h>
-#include <sqlite3.h>
+#include "include/sqlite3.h"
 #include "vmeer_db.h"
 
 #define LOG_TAG "vMeer_DB"

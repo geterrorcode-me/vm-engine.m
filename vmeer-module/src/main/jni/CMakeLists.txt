@@ -4,16 +4,13 @@ project(vmeer_engine_modular)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# HAPUS: set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lsqlite3") 
-# Flag -l tidak boleh di sini karena ini area Compiler, bukan Linker.
-
 set(JNI_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 
-# Mengarahkan compiler ke folder header
+# Pastikan folder include lokal diprioritaskan
 include_directories(
-    ${JNI_SRC_DIR}
     ${JNI_SRC_DIR}/include
+    ${JNI_SRC_DIR}
     ${SHADOWHOOK_DIR}/include
 )
 
@@ -28,6 +25,8 @@ set(VMEER_SOURCES
     vmeer_core.cpp
     vmeer_context.cpp
     vmeer_db.cpp
+    # SQLite Amalgamation: Ini akan dikompilasi langsung ke vmeer_engine
+    ${JNI_SRC_DIR}/sqlite3.c
     vmeer_pms.cpp
     binder_engine.cpp
     sensor_engine.cpp
@@ -42,17 +41,23 @@ set(VMEER_SOURCES
 # Build Library Utama
 add_library(vmeer_engine SHARED ${VMEER_SOURCES})
 
-# Compile options untuk debugging
+# Tambahkan flag khusus agar SQLite bekerja maksimal di Android
+target_compile_definitions(vmeer_engine PRIVATE 
+    SQLITE_ENABLE_RTREE
+    SQLITE_ENABLE_FTS5
+    SQLITE_THREADSAFE=1
+)
+
 target_compile_options(vmeer_engine PRIVATE -Wall -Wextra)
 
-# Bagian terpenting: Menautkan library sistem NDK
+# Bagian Linker
 target_link_libraries(vmeer_engine 
     shadowhook 
     log 
     android 
     EGL 
     GLESv2 
-    sqlite3    # Linker otomatis mencari libsqlite3.so di sysroot NDK
+    # sqlite3 DIHAPUS dari sini karena sudah ada di VMEER_SOURCES sebagai .c
     z          
     atomic     
 )

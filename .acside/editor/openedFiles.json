@@ -5,13 +5,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1631,
-          "line": 65
+          "index": 1733,
+          "line": 70
         },
         "start": {
           "column": 0,
-          "index": 1631,
-          "line": 65
+          "index": 1733,
+          "line": 70
         }
       }
     },
@@ -124,14 +124,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_db.cpp",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 2055,
-          "line": 70
+          "column": 28,
+          "index": 109,
+          "line": 4
         },
         "start": {
-          "column": 0,
-          "index": 2055,
-          "line": 70
+          "column": 28,
+          "index": 109,
+          "line": 4
         }
       }
     },
@@ -211,5 +211,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_db.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt"
 }
