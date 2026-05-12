@@ -1,9 +1,8 @@
-// PENTING: Jika file ada di folder jni/include/, gunakan path ini
-#include "include/sqlite3.h" 
 #include <string>
 #include <cstring>
 #include <cstdlib>
 #include <android/log.h>
+#include "include/sqlite3.h" // Path harus akurat ke folder include Anda
 #include "vmeer_db.h"
 
 #define LOG_TAG "vMeer_DB"
@@ -11,7 +10,7 @@
 
 static sqlite3* g_db = nullptr;
 
-// Helper Internal C++
+// Helper internal C++
 std::string query_android_id(const char* pkg_name) {
     if (!g_db || !pkg_name) return "default_id";
 
@@ -34,6 +33,7 @@ extern "C" {
 
 bool init_vmeer_database(const char* db_path) {
     if (sqlite3_open(db_path, &g_db) != SQLITE_OK) {
+        LOGI("vMeer: [DB] Failed to open %s", db_path);
         return false;
     }
     
@@ -42,7 +42,10 @@ bool init_vmeer_database(const char* db_path) {
     
     char* err_msg = nullptr;
     if (sqlite3_exec(g_db, sql, nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        if (err_msg) sqlite3_free(err_msg);
+        if (err_msg) {
+            LOGI("vMeer: [DB] SQL Error: %s", err_msg);
+            sqlite3_free(err_msg);
+        }
         return false;
     }
     return true;
