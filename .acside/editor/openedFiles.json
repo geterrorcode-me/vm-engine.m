@@ -1,32 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_stealth.h",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "column": 19,
+          "index": 1280,
+          "line": 38
         },
         "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/vmeer_system.h",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        },
-        "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "column": 19,
+          "index": 1280,
+          "line": 38
         }
       }
     },
@@ -35,16 +20,46 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1963,
-          "line": 68
+          "index": 1580,
+          "line": 51
         },
         "start": {
           "column": 0,
-          "index": 1963,
-          "line": 68
+          "index": 1580,
+          "line": 51
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/pms_runtime.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1352,
+          "line": 50
+        },
+        "start": {
+          "column": 0,
+          "index": 1352,
+          "line": 50
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1358,
+          "line": 39
+        },
+        "start": {
+          "column": 0,
+          "index": 1358,
+          "line": 39
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_engine.cpp"
 }
