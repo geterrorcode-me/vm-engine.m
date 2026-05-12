@@ -20,7 +20,7 @@
 // --- Logic Modules (Virtual Services) ---
 #include "binder_engine.h"           // Virtual AMS & Identity Spoofing
 #include "sensor_engine.h"           // Sensor Noise & Jitter
-#include "pms_runtime.h"             // Virtual Package Ecosystem
+#include "vmeer_pms.h"             // Virtual Package Ecosystem
 #include "egl_bridge.h"              // Graphics/GPU Vendor Virtualization
 
 // --- Legacy & Bridge ---
