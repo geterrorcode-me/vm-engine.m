@@ -1,50 +1,45 @@
-#include "include/vmeer_context.h"
+#include "include/pms_runtime.h"
 #include <android/log.h>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #define LOG_TAG "vMeer_PMS"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace vmeer {
 namespace pms {
 
-/**
- * Filter daftar paket yang diinstal.
- * Menghapus paket vMeer dari list agar aplikasi target merasa dia di lingkungan asli.
- */
-void filter_package_list(std::vector<std::string>& packages) {
-    std::vector<std::string> blacklisted = {
-        "com.vmeer.virtual", 
-        "com.vmeer.manager",
-        "io.github.vmeer"
-    };
+    /**
+     * Evolusi: Filter daftar paket agar aplikasi target merasa 
+     * berada di lingkungan yang bersih (Virtual Ecosystem).
+     */
+    void filter_package_list(std::vector<std::string>& packages) {
+        // Daftar paket yang dilarang terlihat oleh guest app
+        std::vector<std::string> blacklisted = {
+            "com.topjohnwu.magisk",
+            "com.vmeer.manager",
+            "org.meowcat.edxposed.manager"
+        };
 
-    for (auto it = packages.begin(); it != packages.end(); ) {
-        bool is_blacklisted = false;
-        for (const auto& b : blacklisted) {
-            if (*it == b) {
-                is_blacklisted = true;
-                break;
-            }
-        }
-        if (is_blacklisted) {
-            LOGI("vMeer_PMS: Hiding package: %s", it->c_str());
-            it = packages.erase(it);
-        } else {
-            ++it;
-        }
+        packages.erase(
+            std::remove_if(packages.begin(), packages.end(), [&](const std::string& pkg) {
+                for (const auto& b : blacklisted) {
+                    if (pkg.find(b) != std::string::npos) {
+                        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Hiding package: %s", pkg.c_str());
+                        return true;
+                    }
+                }
+                return false;
+            }), 
+            packages.end()
+        );
     }
-}
 
-/**
- * Mocking Installer Package Name.
- * Banyak app cek apakah mereka diinstall dari Play Store atau bukan.
- */
-std::string get_virtual_installer(const std::string& target_pkg) {
-    // Kita bisa buat deterministik: Selalu terlihat diinstall dari Play Store
-    return "com.android.vending";
-}
+    std::string get_virtual_installer(const std::string& target_pkg) {
+        // Berpura-pura diinstall oleh Play Store untuk semua aplikasi virtual
+        (void)target_pkg;
+        return "com.android.vending";
+    }
 
 } // namespace pms
 } // namespace vmeer

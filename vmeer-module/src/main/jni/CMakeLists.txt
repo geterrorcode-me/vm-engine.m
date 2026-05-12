@@ -31,6 +31,7 @@ set(VMEER_SOURCES
     binder_engine.cpp
     sensor_engine.cpp
     pms_runtime.cpp
+    ams_runtime.cpp
     egl_bridge.cpp
     vmeer_stealth.cpp
     surface_vm.cpp
