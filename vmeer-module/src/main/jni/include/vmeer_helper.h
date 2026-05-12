@@ -1,6 +1,6 @@
 namespace vmeer {
 namespace helper {
-    bool InitSharedMemory();    // Untuk Daemon (vmeerd)
-    void ConnectSharedState();  // Untuk Library (vmeer_engine)
+    bool InitSharedMemory();    // Tetap bool
+    bool ConnectSharedState();  // UBAH DARI void KE bool
 }
 }
