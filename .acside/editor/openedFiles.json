@@ -80,13 +80,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 217,
-          "line": 15
+          "index": 253,
+          "line": 17
         },
         "start": {
           "column": 0,
-          "index": 217,
-          "line": 15
+          "index": 253,
+          "line": 17
         }
       }
     },
@@ -121,32 +121,17 @@
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/sqlite3.h",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        },
-        "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_db.cpp",
       "selection": {
         "end": {
           "column": 0,
-          "index": 1843,
-          "line": 61
+          "index": 1669,
+          "line": 49
         },
         "start": {
           "column": 0,
-          "index": 1843,
-          "line": 61
+          "index": 1669,
+          "line": 49
         }
       }
     },
@@ -185,13 +170,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1059,
-          "line": 38
+          "index": 760,
+          "line": 22
         },
         "start": {
           "column": 0,
-          "index": 1059,
-          "line": 38
+          "index": 760,
+          "line": 22
         }
       }
     },
@@ -226,5 +211,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_db.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_context.cpp"
 }

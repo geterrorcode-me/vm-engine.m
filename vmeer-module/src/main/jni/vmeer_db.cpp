@@ -2,7 +2,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <android/log.h>
-#include "include/sqlite3.h" // Path harus akurat ke folder include Anda
+#include <sqlite3.h> // GUNAKAN INI: Sekarang mengambil dari NDK
 #include "vmeer_db.h"
 
 #define LOG_TAG "vMeer_DB"
@@ -10,14 +10,12 @@
 
 static sqlite3* g_db = nullptr;
 
-// Helper internal C++
+// Internal Helper C++
 std::string query_android_id(const char* pkg_name) {
     if (!g_db || !pkg_name) return "default_id";
-
     const char* sql = "SELECT android_id FROM v_device_profile WHERE pkg_name = ?;";
     sqlite3_stmt* stmt;
     std::string result = "default_id";
-
     if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
         sqlite3_bind_text(stmt, 1, pkg_name, -1, SQLITE_STATIC);
         if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -30,22 +28,13 @@ std::string query_android_id(const char* pkg_name) {
 }
 
 extern "C" {
-
 bool init_vmeer_database(const char* db_path) {
-    if (sqlite3_open(db_path, &g_db) != SQLITE_OK) {
-        LOGI("vMeer: [DB] Failed to open %s", db_path);
-        return false;
-    }
-    
+    if (sqlite3_open(db_path, &g_db) != SQLITE_OK) return false;
     const char* sql = "CREATE TABLE IF NOT EXISTS v_device_profile ("
                       "pkg_name TEXT PRIMARY KEY, android_id TEXT, imei TEXT, model TEXT);";
-    
     char* err_msg = nullptr;
     if (sqlite3_exec(g_db, sql, nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        if (err_msg) {
-            LOGI("vMeer: [DB] SQL Error: %s", err_msg);
-            sqlite3_free(err_msg);
-        }
+        if (err_msg) sqlite3_free(err_msg);
         return false;
     }
     return true;
@@ -57,5 +46,4 @@ const char* get_v_android_id_c(const char* pkg_name) {
     if (out) strcpy(out, id.c_str());
     return out;
 }
-
 }
