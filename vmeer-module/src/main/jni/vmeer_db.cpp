@@ -8,6 +8,23 @@
 
 static sqlite3* db = nullptr;
 
+// Fungsi Helper C++ (Taruh di luar extern "C")
+std::string get_v_android_id_cpp(const char* pkg_name) {
+    const char* sql = "SELECT android_id FROM v_device_profile WHERE pkg_name = ?;";
+    sqlite3_stmt* stmt;
+    std::string result = "default_id";
+
+    if (db && sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, pkg_name, -1, SQLITE_STATIC);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const char* val = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+            if(val) result = val;
+        }
+        sqlite3_finalize(stmt);
+    }
+    return result;
+}
+
 extern "C" {
 
 bool init_vmeer_database(const char* db_path) {
@@ -16,7 +33,6 @@ bool init_vmeer_database(const char* db_path) {
         return false;
     }
 
-    // Buat tabel profil jika belum ada
     const char* sql = "CREATE TABLE IF NOT EXISTS v_device_profile ("
                       "pkg_name TEXT PRIMARY KEY, "
                       "android_id TEXT, "
@@ -34,22 +50,11 @@ bool init_vmeer_database(const char* db_path) {
     return true;
 }
 
-/**
- * Mengambil Android ID virtual dari database berdasarkan nama paket.
- */
-std::string get_v_android_id(const char* pkg_name) {
-    const char* sql = "SELECT android_id FROM v_device_profile WHERE pkg_name = ?;";
-    sqlite3_stmt* stmt;
-    std::string result = "default_id";
-
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
-        sqlite3_bind_text(stmt, 1, pkg_name, -1, SQLITE_STATIC);
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            result = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        }
-        sqlite3_finalize(stmt);
-    }
-    return result;
+// Wrapper untuk C jika dibutuhkan oleh modul lain
+const char* get_v_android_id_c(const char* pkg_name) {
+    static std::string temp_id;
+    temp_id = get_v_android_id_cpp(pkg_name);
+    return temp_id.c_str();
 }
 
 }
