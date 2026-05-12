@@ -1,59 +1,46 @@
-#include "vmeer_pms.h"
+#include "include/vmeer_pms.h"
 #include <android/log.h>
+#include <algorithm>
 
 #define LOG_TAG "vMeer_PMS"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace vmeer {
 namespace pms {
 
-PMSRuntime& PMSRuntime::Get() {
-    static PMSRuntime instance;
-    return instance;
-}
-
-void PMSRuntime::RegisterPackage(const std::string& pkg_name, uint32_t v_uid) {
-    auto pkg = std::make_shared<VirtualPackage>();
-    pkg->package_name = pkg_name;
-    pkg->virtual_uid = v_uid;
-    pkg->data_dir = "/data/data/com.vmeer.virtual/v_user/" + pkg_name;
-    pkg->is_visible = true;
-
-    m_registry[pkg_name] = pkg;
-    m_uid_to_pkg[v_uid] = pkg_name;
-    
-    LOGI("vMeer: [PMS] Registered %s with Virtual UID: %u", pkg_name.c_str(), v_uid);
-}
-
-std::shared_ptr<VirtualPackage> PMSRuntime::GetPackage(const std::string& pkg_name) {
-    if (m_registry.find(pkg_name) != m_registry.end()) {
-        return m_registry[pkg_name];
+    // Implementasi filter_package_data (Yang dipanggil binder_engine.cpp)
+    bool filter_package_data(void* reply_parcel) {
+        if (!reply_parcel) return false;
+        
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "PMS: Filtering Transaction via Parcel...");
+        // Di sini nanti kita bedah Parcel-nya
+        return true; 
     }
-    return nullptr;
-}
 
-uint32_t PMSRuntime::GetVirtualUid(const std::string& pkg_name) {
-    auto pkg = GetPackage(pkg_name);
-    return pkg ? pkg->virtual_uid : 0;
-}
+    // Pindahan dari pms_runtime.cpp
+    void filter_package_list(std::vector<std::string>& packages) {
+        std::vector<std::string> blacklisted = {
+            "com.topjohnwu.magisk",
+            "com.vmeer.manager",
+            "org.meowcat.edxposed.manager"
+        };
 
-std::string PMSRuntime::GetPackageFromUid(uint32_t v_uid) {
-    if (m_uid_to_pkg.find(v_uid) != m_uid_to_pkg.end()) {
-        return m_uid_to_pkg[v_uid];
+        packages.erase(
+            std::remove_if(packages.begin(), packages.end(), [&](const std::string& pkg) {
+                for (const auto& b : blacklisted) {
+                    if (pkg.find(b) != std::string::npos) {
+                        return true;
+                    }
+                }
+                return false;
+            }), 
+            packages.end()
+        );
     }
-    return "";
-}
 
-bool PMSRuntime::IsVisible(const std::string& target_pkg) {
-    // Logika Visibility Graph: 
-    // Contoh: Hanya tampilkan jika paket terdaftar di registry virtual kita
-    return m_registry.find(target_pkg) != m_registry.end();
-}
-
-std::string PMSRuntime::ResolveVirtualPath(const std::string& pkg_name) {
-    auto pkg = GetPackage(pkg_name);
-    return pkg ? pkg->data_dir : "";
-}
+    std::string get_virtual_installer(const std::string& target_pkg) {
+        (void)target_pkg;
+        return "com.android.vending";
+    }
 
 } // namespace pms
 } // namespace vmeer

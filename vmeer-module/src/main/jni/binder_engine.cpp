@@ -2,7 +2,7 @@
 #include <android/log.h>
 #include <string>
 #include "include/vmeer_context.h"
-#include "include/pms_runtime.h"
+#include "include/vmeer_pms.h"
 #include "include/ams_runtime.h" // Modul AMS diperdalam
 #include "include/wms_runtime.h" // Modul WMS baru
 #include "include/vmeer_helper.h"
