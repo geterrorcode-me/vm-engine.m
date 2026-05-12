@@ -9,6 +9,9 @@ set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 
 # Masukkan folder include
 include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/shadowhook/include
     ${JNI_SRC_DIR}
     ${JNI_SRC_DIR}/include
     ${SHADOWHOOK_DIR}/include

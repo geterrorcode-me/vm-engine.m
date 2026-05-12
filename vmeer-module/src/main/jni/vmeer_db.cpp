@@ -1,7 +1,8 @@
-#include "include/sqlite3.h"
+// PENTING: Jika file ada di folder jni/include/, gunakan path ini
+#include "include/sqlite3.h" 
 #include <string>
-#include <cstring> // Untuk strcpy
-#include <cstdlib> // Untuk malloc
+#include <cstring>
+#include <cstdlib>
 #include <android/log.h>
 #include "vmeer_db.h"
 
@@ -10,7 +11,7 @@
 
 static sqlite3* g_db = nullptr;
 
-// Internal Helper
+// Helper Internal C++
 std::string query_android_id(const char* pkg_name) {
     if (!g_db || !pkg_name) return "default_id";
 

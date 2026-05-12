@@ -19,7 +19,7 @@ bool OnTransactOverride(uint32_t code, void* data_parcel, void* reply_parcel, ui
 
     // 2. Logika untuk Android ID (Settings Provider)
     if (code == 1 /* TRANSACTION_get_string_settings_id */) { 
-        std::string v_id = RuntimeContext::Get().GetAndroidId();
+        std::string v_id = vmeer::RuntimeContext::Get().GetVAndroidId();
         // write_to_parcel(reply_parcel, v_id);
         __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Redirected Android ID to: %s", v_id.c_str());
         return true; 
