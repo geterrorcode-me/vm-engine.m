@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 1555,
-          "line": 61
+          "column": 51,
+          "index": 184,
+          "line": 5
         },
         "start": {
-          "column": 0,
-          "index": 1555,
-          "line": 61
+          "column": 51,
+          "index": 184,
+          "line": 5
         }
       }
     },
@@ -211,5 +211,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_context.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt"
 }
