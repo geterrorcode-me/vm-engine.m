@@ -1,8 +1,16 @@
 #ifndef VMEER_PMS_RUNTIME_H
 #define VMEER_PMS_RUNTIME_H
-#include <vector>
-#include <string>
-namespace vmeer { namespace pms {
-    void FilterPackageList(std::vector<std::string>& packages);
-}}
+
+namespace vmeer {
+namespace pms {
+
+    // Tambahkan deklarasi ini
+    bool filter_package_data(void* reply_parcel);
+
+    // Fungsi lain yang mungkin sudah ada
+    void init_pms_hooks();
+
+} // namespace pms
+} // namespace vmeer
+
 #endif
