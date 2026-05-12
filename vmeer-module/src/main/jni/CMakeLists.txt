@@ -7,18 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(JNI_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 
-# Cari Library Sistem NDK
-find_library(log-lib log)
-find_library(android-lib android)
-find_library(egl-lib EGL)
-find_library(gles-lib GLESv2)
-find_library(z-lib z)
-find_library(sqlite-lib sqlite3) # Menemukan libsqlite3.so sistem
-
-# PENTING: Jika OpenSSL tidak ada di Runner, kita bisa abaikan dulu 
-# atau arahkan ke prebuilt jika Anda memilikinya.
-find_library(crypto-lib crypto)
-
+# Masukkan folder include
 include_directories(
     ${JNI_SRC_DIR}
     ${JNI_SRC_DIR}/include
@@ -30,7 +19,8 @@ add_library(shadowhook SHARED IMPORTED)
 set_target_properties(shadowhook PROPERTIES IMPORTED_LOCATION 
     ${SHADOWHOOK_DIR}/libs/${ANDROID_ABI}/libshadowhook.so)
 
-add_library(vmeer_engine SHARED 
+# List semua file source
+set(VMEER_SOURCES
     vmeer_engine.cpp 
     vmeer_core.cpp
     vmeer_context.cpp
@@ -45,14 +35,24 @@ add_library(vmeer_engine SHARED
     vmeer_system.cpp
 )
 
+add_library(vmeer_engine SHARED ${VMEER_SOURCES})
+
+# Kita gunakan flag -l secara langsung untuk library sistem NDK
+# Ini jauh lebih aman di CI daripada find_library yang sering gagal
 target_link_libraries(vmeer_engine 
     shadowhook 
-    ${log-lib}
-    ${android-lib}
-    ${egl-lib}
-    ${gles-lib}
-    ${sqlite-lib} # Gunakan variabel hasil find_library
-    ${z-lib}
-    ${crypto-lib} # Gunakan variabel, jangan hardcoded 'crypto'
-    atomic
+    log 
+    android 
+    EGL 
+    GLESv2 
+    sqlite3    # Menautkan libsqlite3.so sistem
+    z          # Menautkan libz.so sistem
+    atomic     # Penting untuk ARM
 )
+
+# Modul tambahan
+add_library(surface_vm_standalone SHARED surface_vm.cpp)
+target_link_libraries(surface_vm_standalone shadowhook log android EGL)
+
+add_executable(vmeerd vmeerd.cpp)
+target_link_libraries(vmeerd log)
