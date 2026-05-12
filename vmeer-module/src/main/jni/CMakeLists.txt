@@ -36,6 +36,8 @@ set(VMEER_SOURCES
     surface_vm.cpp
     binder_vm.cpp
     vmeer_system.cpp
+    vmeer_helper.cpp
+    vmeer_zygote.cpp
 )
 
 # Build Library Utama
