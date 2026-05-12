@@ -28,6 +28,7 @@ set(VMEER_SOURCES
     # SQLite Amalgamation: Ini akan dikompilasi langsung ke vmeer_engine
     ${JNI_SRC_DIR}/sqlite3.c
     vmeer_pms.cpp
+    wms_runtime.cpp
     binder_engine.cpp
     sensor_engine.cpp
     ams_runtime.cpp
