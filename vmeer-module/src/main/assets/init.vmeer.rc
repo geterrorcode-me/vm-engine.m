@@ -1,0 +1,15 @@
+service vmeerd /system/bin/vmeerd
+    class main
+    user root
+    group root system shell
+    # Memberikan hak akses spesifik untuk manipulasi namespace & storage
+    capabilities CHOWN DAC_OVERRIDE SYS_ADMIN SYS_CHROOT
+    # Memastikan daemon tetap hidup jika crash
+    oneshot
+    disabled
+    seclabel u:r:magisk:s0
+
+# Jalankan daemon saat boot selesai dan data sudah siap
+on property:sys.boot_completed=1
+    start vmeerd
+    

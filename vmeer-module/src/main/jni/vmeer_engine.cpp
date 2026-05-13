@@ -14,21 +14,22 @@
 #include "vmeer_stealth.h"
 
 // --- Ecosystem Modules ---
-#include "include/vmeer_helper.h"    // Multi-process Sync
-#include "include/vmeer_zygote.h"    // Zygote Hooking
-#include "include/vmeer_context.h"   // Runtime State
-#include "include/vmeer_vfs.h"       // [NEW] Virtual File System & Stealth
+#include "include/vmeer_helper.h"
+#include "include/vmeer_zygote.h"
+#include "include/vmeer_context.h"
+#include "include/vmeer_vfs.h"
+#include "include/vmeer_system.h" // Pastikan header ini ada
 
 // --- Logic Modules ---
-#include "binder_engine.h"           // Virtual AMS & WMS
-#include "sensor_engine.h"           // Sensor Jitter
-#include "vmeer_pms.h"               // Virtual Package Manager
-#include "egl_bridge.h"              // GPU Virtualization
-#include "vmeer_system.h"            // Property Spoofing
+#include "binder_engine.h"
+#include "sensor_engine.h"
+#include "vmeer_pms.h"
+#include "egl_bridge.h"
 
 // --- ART VM Bridge ---
 extern "C" void init_art_hook(JNIEnv* env);
 extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
+extern "C" void syncJavaProperties(JNIEnv* env);
 
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -38,9 +39,10 @@ extern "C" {
 
 /**
  * requestNamespaceSetup:
- * Menghubungi vmeerd untuk isolasi filesystem (Mount Namespace).
+ * Menghubungi vmeerd untuk isolasi filesystem.
+ * Sekarang mengirimkan vuid agar daemon bisa melakukan chown.
  */
-bool requestNamespaceSetup(const char* pkgName) {
+bool requestNamespaceSetup(const char* pkgName, int vuid) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) return false;
 
@@ -52,7 +54,9 @@ bool requestNamespaceSetup(const char* pkgName) {
 
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
         char cmd[512];
-        snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s", pkgName);
+        // Format baru: PREPARE_STORAGE:pkg_name:vuid
+        snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s:%d", pkgName, vuid);
+        
         if (send(sock, cmd, strlen(cmd), 0) > 0) {
             char response[16] = {0};
             if (recv(sock, response, sizeof(response), 0) > 0) {
@@ -69,11 +73,11 @@ bool requestNamespaceSetup(const char* pkgName) {
 
 /**
  * setupVM:
- * JNI Bridge utama yang dipanggil oleh App Host (Java)
+ * Konfigurasi utama saat aplikasi guest akan dijalankan.
  */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
-    (void)clazz; // Hilangkan warning unused
+    (void)clazz;
     
     LOGI("====================================================");
     LOGI("   vMeer OS: Configuring High-End Virtual Machine   ");
@@ -81,21 +85,26 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     const char *path = env->GetStringUTFChars(mirrorPath, nullptr);
     
-    // 1. Dapatkan ClassLoader dari Context aplikasi guest
+    // 1. Update Runtime Context (Penting: Set sebelum request storage)
+    auto& vContext = vmeer::RuntimeContext::Get();
+    vContext.SetVirtualUid(vUid);
+    vContext.SetMirrorPath(path);
+
+    // 2. Request Namespace & Storage Setup ke vmeerd
+    // Menggunakan package default atau bisa diambil dari context
+    requestNamespaceSetup("com.vmeer.guest", vUid);
+
+    // 3. JNI & ART Setup
+    init_art_hook(env);
+    
     jclass context_clazz = env->GetObjectClass(context);
     jmethodID get_class_loader_mid = env->GetMethodID(context_clazz, "getClassLoader", "()Ljava/lang/ClassLoader;");
     jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
 
-    // 2. Bypass Hidden API (Buka gerbang sistem)
-    init_art_hook(env);
-
-    // 3. Suntikkan mirror.jar ke ClassLoader (Priority Loading)
     perform_mirror_injection(env, class_loader, path);
 
-    // 4. Update Runtime Context (vUID & Config)
-    auto& vContext = vmeer::RuntimeContext::Get();
-    vContext.SetVirtualUid(vUid);
-    vContext.SetMirrorPath(path);
+    // 4. Sinkronisasi Identitas Java (Build.MODEL, dll)
+    syncJavaProperties(env);
 
     env->ReleaseStringUTFChars(mirrorPath, path);
     LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
@@ -103,7 +112,7 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
 /**
  * JNI_OnLoad:
- * Mempersiapkan mesin sebelum aplikasi guest mengambil kendali penuh.
+ * Inisialisasi awal saat library dimuat.
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
@@ -112,34 +121,28 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
 
     LOGI("vMeer Engine: Initializing Core Systems...");
 
-    // 1. Stealth & Hooking Engine
+    // 1. Stealth Engine Initialization
     init_vmeer_stealth();
     if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
         LOGE("Critical: ShadowHook failed!");
         return JNI_ERR;
     }
 
-    // 2. Multi-process Synchronization
+    // 2. Synchronization & Core Hooks
     vmeer::helper::ConnectSharedState();
-
-    // 3. Storage Namespace Isolation
-    const char* default_pkg = "com.vmeer.guest";
-    requestNamespaceSetup(default_pkg);
-
-    // 4. Zygote Evolution (Hooking fork untuk sandbox)
     vmeer::zygote::HookForkAndSpecialize();
 
-    // 5. Activation of Service Layers
-    start_binder_proxy();              // Virtual AMS/WMS
-    vmeer::binder::InitHooks();        // Binder Interceptor
-    start_virtual_system_services();   // System Property Spoofing
-    start_egl_bridge();                // GPU Vendor Spoofing
-    vmeer::sensor::InitHooks();        // Hardware Jitter
+    // 3. Services & Spoofing Activation
+    start_binder_proxy();
+    vmeer::binder::InitHooks();
+    start_virtual_system_services(); // Property Spoofing
+    start_egl_bridge();              // GPU Spoofing
+    vmeer::sensor::InitHooks();      // Sensor Jitter
 
-    // 6. [NEW] VFS Engine Activation (Redirection + Ghost + Scrubber)
+    // 4. VFS Engine (Redirection & Cloaking)
     vmeer::vfs::StartVFSEngine();
 
-    LOGI("vMeer Engine: Standby - Awaiting setupVM(context, path, vuid)");
+    LOGI("vMeer Engine: Standby - Awaiting setupVM");
     
     return JNI_VERSION_1_6;
 }

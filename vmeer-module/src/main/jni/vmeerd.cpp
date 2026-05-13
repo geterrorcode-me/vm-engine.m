@@ -8,51 +8,51 @@
 #include <errno.h>
 #include <android/log.h>
 #include <string.h>
+#include <vector>
 
 #define LOG_TAG "vmeerd"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// =============================================================================
-// BAGIAN 1: NAMESPACE & STORAGE LOGIC (Urutan 1 & 2)
-// =============================================================================
-
 class StorageSandbox {
 public:
     static bool initializeIsolation() {
-        // Unshare Mount Namespace agar perubahan mount tidak terlihat oleh host
+        // Master isolation agar host tidak "kotor" oleh mount virtual
         if (unshare(CLONE_NEWNS) != 0) {
             LOGE("vmeerd: Gagal unshare namespace: %s", strerror(errno));
             return false;
         }
-        // Pastikan propagasi mount diatur ke private
         mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL);
-        LOGI("vmeerd: Global Namespace Isolation aktif.");
         return true;
     }
 
-    static bool prepareStorage(const char* pkgName) {
-        // Simulasi pembuatan jalur (Path harus disesuaikan dengan struktur folder virtual Anda)
+    static bool prepareStorage(const char* pkgName, int vuid) {
         char virtualPath[256];
         char targetPath[256];
         
-        sprintf(virtualPath, "/data/data/com.vmeer.io/virtual/%s", pkgName);
+        int user_id = vuid / 100000;
+
+        // Struktur folder sandbox yang sinkron dengan vmeer_vfs.cpp
+        sprintf(virtualPath, "/data/data/com.vmeer.manager/virtual/user_%d/%s/data", user_id, pkgName);
         sprintf(targetPath, "/data/data/%s", pkgName);
 
-        // Melakukan Bind Mount (Inti dari Urutan 2)
-        if (mount(virtualPath, targetPath, NULL, MS_BIND, NULL) == 0) {
-            LOGI("vmeerd: Bind mount sukses untuk %s", pkgName);
+        // 1. Pastikan folder virtual ada
+        mkdir(virtualPath, 0755);
+
+        // 2. Fix Permission: Ini krusial!
+        // Aplikasi guest harus merasa memiliki folder tersebut (UID/GID match)
+        chown(virtualPath, vuid, vuid);
+
+        // 3. Bind Mount dengan MS_REC untuk support OBB/Data subfolders
+        if (mount(virtualPath, targetPath, NULL, MS_BIND | MS_REC, NULL) == 0) {
+            LOGI("vmeerd: Sandbox Storage Linked: %s -> %s (UID: %d)", virtualPath, targetPath, vuid);
             return true;
         } else {
-            LOGE("vmeerd: Bind mount gagal untuk %s: %s", pkgName, strerror(errno));
+            LOGE("vmeerd: Mount failed: %s", strerror(errno));
             return false;
         }
     }
 };
-
-// =============================================================================
-// BAGIAN 2: BROKER IPC (COMMAND HANDLER)
-// =============================================================================
 
 class MessageBroker {
 public:
@@ -61,13 +61,16 @@ public:
         ssize_t bytes_read = recv(client_sock, buffer, sizeof(buffer), 0);
         
         if (bytes_read > 0) {
-            LOGI("vmeerd: Menerima perintah: %s", buffer);
+            std::string raw(buffer);
+            LOGI("vmeerd: Received: %s", buffer);
 
-            // Parsing perintah: PREPARE_STORAGE:com.package.name
-            if (strncmp(buffer, "PREPARE_STORAGE:", 16) == 0) {
-                const char* pkgName = buffer + 16;
+            // Parsing baru: PREPARE_STORAGE:pkg_name:vuid
+            if (raw.find("PREPARE_STORAGE:") == 0) {
+                size_t first_colon = raw.find(':', 16);
+                std::string pkg = raw.substr(16, first_colon - 16);
+                int vuid = std::stoi(raw.substr(first_colon + 1));
                 
-                if (StorageSandbox::prepareStorage(pkgName)) {
+                if (StorageSandbox::prepareStorage(pkg.c_str(), vuid)) {
                     send(client_sock, "OK", 2, 0);
                 } else {
                     send(client_sock, "ERR", 3, 0);
@@ -78,41 +81,32 @@ public:
     }
 };
 
-// =============================================================================
-// BAGIAN 3: DAEMON ENTRY POINT & SERVER LOOP
-// =============================================================================
-
 int main() {
-    LOGI("vmeerd: Daemon memulai siklus hidup...");
+    // Memastikan daemon berjalan sebagai root untuk akses mount
+    if (getuid() != 0) {
+        LOGE("vmeerd must run as root!");
+        return 1;
+    }
 
-    // 1. Inisialisasi Isolasi Namespace Dasar
     if (!StorageSandbox::initializeIsolation()) return 1;
 
-    // 2. Setup Abstract Socket Server
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    
-    // Abstract socket name: \0vmeer_daemon.cms
     addr.sun_path[0] = '\0';
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
-    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        LOGE("vmeerd: Gagal bind socket: %s", strerror(errno));
-        return 1;
-    }
-
+    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) return 1;
     if (listen(server_fd, 10) < 0) return 1;
-    LOGI("vmeerd: Broker siap melayani Engine.");
 
-    // 3. Main Loop
+    LOGI("vmeerd: High-End Broker is Ready.");
+
     while (true) {
         int client_sock = accept(server_fd, NULL, NULL);
         if (client_sock >= 0) {
             MessageBroker::handleCommand(client_sock);
         }
     }
-
     return 0;
 }
