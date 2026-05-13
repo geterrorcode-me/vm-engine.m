@@ -41,6 +41,7 @@ set(VMEER_SOURCES
     vmeer_zygote.cpp
     art_vm.cpp
     vmeer_vfs.cpp
+    vmeer_jni_bridge.cpp
 )
 
 # Build Library Utama
