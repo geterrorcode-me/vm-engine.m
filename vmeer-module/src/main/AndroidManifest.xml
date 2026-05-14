@@ -21,40 +21,17 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <application
-        android:name=".VMeerApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.VMeerOS"
-        
         android:extractNativeLibs="true"
-        
         android:requestLegacyExternalStorage="true"
-        
         android:hardwareAccelerated="true"
-        
-        android:usesCleartextTraffic="true"
-        
-        tools:targetApi="34">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="portrait">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+        android:usesCleartextTraffic="true">
 
         <service
             android:name=".core.VMeerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse"
+            tools:node="replace" />
 
     </application>
 
