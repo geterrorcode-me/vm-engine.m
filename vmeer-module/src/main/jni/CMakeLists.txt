@@ -6,39 +6,47 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(JNI_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
-# Path ke folder libs tempat libzstd.a berada
+# Path ke folder libs sesuai arsitektur (arm64-v8a)
 set(VMEER_LIBS_DIR ${JNI_SRC_DIR}/libs/${ANDROID_ABI})
 
-# 1. Definisi Library Import (WAJIB untuk file .a / .so eksternal)
-# Import ShadowHook
+# ==========================================================
+# 1. DEFINISI LIBRARY IMPORT
+# ==========================================================
+
+# ShadowHook (Shared)
 add_library(shadowhook SHARED IMPORTED)
 set_target_properties(shadowhook PROPERTIES IMPORTED_LOCATION 
     ${SHADOWHOOK_DIR}/libs/${ANDROID_ABI}/libshadowhook.so)
 
-# Import ZSTD (Hasil build GitHub tadi)
+# ZSTD (Static)
 add_library(libzstd STATIC IMPORTED)
 set_target_properties(libzstd PROPERTIES IMPORTED_LOCATION 
     ${VMEER_LIBS_DIR}/libzstd.a)
 
-# Import FUSE (Jika kamu sudah punya libfuse3.a nanti)
-add_library(libfuse STATIC IMPORTED)
-set_target_properties(libfuse PROPERTIES IMPORTED_LOCATION 
+# FUSE 3 (Static - Hasil build sukses tadi)
+add_library(libfuse3 STATIC IMPORTED) # Nama disamakan jadi libfuse3
+set_target_properties(libfuse3 PROPERTIES IMPORTED_LOCATION 
     ${VMEER_LIBS_DIR}/libfuse3.a)
 
-# 2. Header Directories
+# ==========================================================
+# 2. HEADER DIRECTORIES
+# ==========================================================
 include_directories(
-    ${JNI_SRC_DIR}/include        # Tempat zstd.h dan fuse.h berada
+    ${JNI_SRC_DIR}/include
+    ${JNI_SRC_DIR}/include/fuse3    # Path header fuse hasil build
     ${JNI_SRC_DIR}
     ${SHADOWHOOK_DIR}/include
 )
 
-# 3. List Source Files
+# ==========================================================
+# 3. LIST SOURCE FILES
+# ==========================================================
 set(VMEER_SOURCES
     vmeer_engine.cpp 
     vmeer_core.cpp
     vmeer_context.cpp
     vmeer_db.cpp
-    ${JNI_SRC_DIR}/sqlite3.c      # SQLite dikompilasi langsung
+    ${JNI_SRC_DIR}/sqlite3.c
     vmeer_pms.cpp
     wms_runtime.cpp
     binder_engine.cpp
@@ -59,32 +67,44 @@ set(VMEER_SOURCES
     vmeer_squashfs_bridge.cpp
 )
 
-# 4. Build Library Utama
+# ==========================================================
+# 4. BUILD TARGET UTAMA
+# ==========================================================
 add_library(vmeer_engine SHARED ${VMEER_SOURCES})
 
-# Flag SQLite & Optimasi
+# Flag SQLite & Engine Optimization
 target_compile_definitions(vmeer_engine PRIVATE 
     SQLITE_ENABLE_RTREE
     SQLITE_ENABLE_FTS5
     SQLITE_THREADSAFE=1
+    FUSE_USE_VERSION=31  # Versi API FUSE yang digunakan
+    SHADOWHOOK_IS_SHARED_LIB
 )
 
-# 5. Linker (Gunakan nama target yang di-import di atas)
+# ==========================================================
+# 5. LINKER (Menghubungkan semua komponen)
+# ==========================================================
 target_link_libraries(vmeer_engine 
     shadowhook 
-    libzstd     # Harus sesuai dengan nama di add_library
-    libfuse     # Harus sesuai dengan nama di add_library
+    libzstd     
+    libfuse3    # Sekarang sudah cocok dengan add_library di atas
     log 
     android 
     EGL 
     GLESv2 
     z           # System library (zlib)
     atomic     
+    dl          # Diperlukan untuk dynamic loading
 )
 
-# Modul Tambahan
+# ==========================================================
+# 6. MODUL STANDALONE & DAEMON
+# ==========================================================
+
+# Surface VM Standalone
 add_library(surface_vm_standalone SHARED surface_vm.cpp)
 target_link_libraries(surface_vm_standalone shadowhook log android EGL)
 
+# VMeer Daemon (Untuk kontrol root/shell)
 add_executable(vmeerd vmeerd.cpp)
-target_link_libraries(vmeerd log)
+target_link_libraries(vmeerd log android libfuse3 libzstd)
