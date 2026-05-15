@@ -10,10 +10,6 @@
 namespace vmeer {
 namespace art {
 
-/**
- * Step 1: Hidden API Bypass
- * Membuka blokir agar mirror.jar bisa mengakses API internal (@hide).
- */
 void ApplyHiddenApiBypass(JNIEnv* env) {
     jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
     if (!vm_runtime_clazz) return;
@@ -23,7 +19,6 @@ void ApplyHiddenApiBypass(JNIEnv* env) {
 
     jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
     
-    // Wildcard "L" membebaskan semua class
     jobjectArray str_array = env->NewObjectArray(1, env->FindClass("java/lang/String"), env->NewStringUTF("L"));
     env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
 
@@ -35,25 +30,20 @@ void ApplyHiddenApiBypass(JNIEnv* env) {
     }
 }
 
-/**
- * Step 2: DexPathList Injection
- * Menyuntikkan mirror.jar ke dalam BaseDexClassLoader aplikasi.
- */
 bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& mirror_path) {
     LOGI("vMeer ART: Injecting %s into ClassLoader", mirror_path.c_str());
 
-    // 1. Ambil field 'pathList' dari BaseDexClassLoader
     jclass loader_clazz = env->FindClass("dalvik/system/BaseDexClassLoader");
     jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
     jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
 
-    // 2. Ambil field 'dexElements' dari DexPathList
     jclass path_list_clazz = env->GetObjectClass(path_list_obj);
+    
+    // FIX: Hapus atau bungkam variabel yang tidak terpakai
     jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
     jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
+    (void)old_elements; // <--- TAMBAHKAN INI agar tidak error 'unused variable'
 
-    // 3. Buat Element baru untuk mirror.jar (menggunakan reflection ke method makeDexElements)
-    // Untuk kemudahan di versi high-end ini, kita gunakan 'addDexPath' jika tersedia (Android 14 friendly)
     jmethodID add_dex_path_mid = env->GetMethodID(path_list_clazz, "addDexPath", "(Ljava/lang/String;Z)V");
 
     if (add_dex_path_mid) {
@@ -63,23 +53,17 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
         return true;
     }
 
-    LOGE("vMeer ART: addDexPath method not found. Manual array splicing required.");
+    LOGE("vMeer ART: addDexPath method not found.");
     return false;
 }
 
 } // namespace art
 } // namespace vmeer
 
-/**
- * Bridge untuk vmeer_engine.cpp
- */
 extern "C" void init_art_hook(JNIEnv* env) {
     vmeer::art::ApplyHiddenApiBypass(env);
 }
 
-/**
- * Bridge untuk setupVM di vmeer_engine.cpp
- */
 extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path) {
     vmeer::art::InjectMirrorFramework(env, class_loader, path);
 }

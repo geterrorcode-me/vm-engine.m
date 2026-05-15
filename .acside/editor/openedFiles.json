@@ -215,16 +215,46 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 3653,
-          "line": 120
+          "index": 2518,
+          "line": 79
         },
         "start": {
           "column": 0,
-          "index": 3653,
-          "line": 120
+          "index": 2518,
+          "line": 79
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/sensor_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 706,
+          "line": 28
+        },
+        "start": {
+          "column": 0,
+          "index": 706,
+          "line": 28
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2779,
+          "line": 69
+        },
+        "start": {
+          "column": 0,
+          "index": 2779,
+          "line": 69
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_stealth.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp"
 }
