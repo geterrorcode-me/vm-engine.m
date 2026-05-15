@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_main.cpp",
       "selection": {
         "end": {
-          "column": 23,
-          "index": 822,
-          "line": 24
+          "column": 0,
+          "index": 1156,
+          "line": 37
         },
         "start": {
-          "column": 12,
-          "index": 811,
-          "line": 24
+          "column": 0,
+          "index": 1156,
+          "line": 37
         }
       }
     },
