@@ -95,13 +95,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1055,
-          "line": 32
+          "index": 392,
+          "line": 15
         },
         "start": {
           "column": 0,
-          "index": 1055,
-          "line": 32
+          "index": 392,
+          "line": 15
         }
       }
     },
@@ -286,5 +286,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_vm.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_fuse_ops.cpp"
 }
