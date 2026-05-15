@@ -10,38 +10,37 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Definisi tipe fungsi untuk original call
+// Definisi tipe fungsi agar sinkron dengan libc
 typedef ssize_t (*p_read_t)(int, void *, size_t);
 typedef int (*p_open_t)(const char *, int, mode_t);
 
+// Pointer untuk menyimpan alamat fungsi asli
 static p_read_t orig_read = nullptr;
 static p_open_t orig_open = nullptr;
 
-// Thread-local atau global tracker untuk maps
-// Catatan: Menggunakan global FD bisa berbahaya jika banyak thread, 
-// tapi untuk keperluan stealth dasar ini masih fungsional.
+// Tracker sederhana untuk file descriptor /proc/self/maps
 static int maps_fd = -1;
 
 extern "C" {
 
 /**
- * Hook read: 
- * Memotong baris /proc/self/maps yang mengandung jejak vMeer atau ShadowHook.
+ * hook_read:
+ * Memanipulasi hasil pembacaan memori maps untuk menyembunyikan jejak engine.
  */
 ssize_t hook_read(int fd, void *buf, size_t count) {
     if (orig_read == nullptr) return -1;
 
     ssize_t ret = orig_read(fd, buf, count);
     
-    // Hanya proses jika ini adalah FD dari maps yang kita tandai
+    // Hanya proses jika FD cocok dengan maps yang kita tandai
     if (ret > 0 && fd == maps_fd && maps_fd != -1) {
-        std::string content((char*)buf, (size_t)ret);
+        std::string content(static_cast<char*>(buf), static_cast<size_t>(ret));
         bool modified = false;
         
-        // Cari dan hapus baris yang mengandung library kita
-        const char* keywords[] = {"vmeer", "shadowhook", "libfuse3", "libzstd"};
+        // Daftar kata kunci yang dilarang terlihat oleh Anti-Cheat
+        const char* blacklisted[] = {"vmeer", "shadowhook", "libfuse3", "libzstd"};
         
-        for (const char* key : keywords) {
+        for (const char* key : blacklisted) {
             size_t pos;
             while ((pos = content.find(key)) != std::string::npos) {
                 size_t line_start = content.rfind('\n', pos);
@@ -60,9 +59,9 @@ ssize_t hook_read(int fd, void *buf, size_t count) {
         
         if (modified) {
             size_t new_len = content.length();
-            if (new_len <= (size_t)count) {
+            if (new_len <= static_cast<size_t>(count)) {
                 memcpy(buf, content.c_str(), new_len);
-                return (ssize_t)new_len;
+                return static_cast<ssize_t>(new_len);
             }
         }
     }
@@ -70,8 +69,8 @@ ssize_t hook_read(int fd, void *buf, size_t count) {
 }
 
 /**
- * Hook open: 
- * Menandai file descriptor jika aplikasi (terutama Anti-Cheat) membaca maps.
+ * hook_open:
+ * Mendeteksi kapan aplikasi mencoba mengintip daftar library di memori.
  */
 int hook_open(const char *pathname, int flags, mode_t mode) {
     if (orig_open == nullptr) return -1;
@@ -79,9 +78,9 @@ int hook_open(const char *pathname, int flags, mode_t mode) {
     int fd = orig_open(pathname, flags, mode);
     
     if (fd != -1 && pathname != nullptr) {
-        if (strstr(pathname, "/proc/self/maps") != nullptr || strstr(pathname, "/proc/maps") != nullptr) {
+        if (strstr(pathname, "/proc/self/maps") != nullptr) {
             maps_fd = fd;
-            LOGI("vMeer: [Stealth] Cloaking maps on FD: %d", fd);
+            LOGI("vMeer: [Stealth] Targeted maps access intercepted (FD: %d)", fd);
         }
     }
     return fd;
@@ -89,31 +88,33 @@ int hook_open(const char *pathname, int flags, mode_t mode) {
 
 /**
  * init_vmeer_stealth:
- * Mengaktifkan sistem kamuflase memori.
+ * Poin aktivasi sistem stealth.
  */
 void init_vmeer_stealth() {
     LOGI("vMeer: [Stealth] Engaging Cloaking Device...");
     
-    // FIX: Gunakan casting (void*) dan (void**) secara eksplisit 
-    // untuk menghindari error "declared here" pada shadowhook_hook_sym_name
+    // PENTING: Lakukan casting ke (void*) dan (void**) secara eksplisit
+    // agar sinkron dengan deklarasi di shadowhook.h
     
-    // Hook 'open'
-    shadowhook_hook_sym_name(
+    void* stub_open = shadowhook_hook_sym_name(
         "libc.so", 
         "open", 
-        (void*)hook_open, 
-        (void**)&orig_open
+        reinterpret_cast<void*>(hook_open), 
+        reinterpret_cast<void**>(&orig_open)
     );
 
-    // Hook 'read'
-    shadowhook_hook_sym_name(
+    void* stub_read = shadowhook_hook_sym_name(
         "libc.so", 
         "read", 
-        (void*)hook_read, 
-        (void**)&orig_read
+        reinterpret_cast<void*>(hook_read), 
+        reinterpret_cast<void**>(&orig_read)
     );
-    
-    LOGI("vMeer: [Stealth] Engine is now invisible in memory maps.");
+
+    if(!stub_open || !stub_read) {
+        LOGE("vMeer: [Stealth] Hooking failed! Stealth is COMPROMISED.");
+    } else {
+        LOGI("vMeer: [Stealth] Cloaking ACTIVE.");
+    }
 }
 
 } // extern "C"
