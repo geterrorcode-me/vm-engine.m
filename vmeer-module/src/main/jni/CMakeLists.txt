@@ -42,6 +42,9 @@ set(VMEER_SOURCES
     art_vm.cpp
     vmeer_vfs.cpp
     vmeer_jni_bridge.cpp
+    vmeer_main.cpp
+    vmeer_fuse_ops.cpp
+    vmeer_squashfs_bridge.cpp
 )
 
 # Build Library Utama
@@ -66,6 +69,9 @@ target_link_libraries(vmeer_engine
     # sqlite3 DIHAPUS dari sini karena sudah ada di VMEER_SOURCES sebagai .c
     z          
     atomic     
+    fuse
+    squashfs    # Pastikan libsquashfs.a ada
+    zstd
 )
 
 # Modul tambahan

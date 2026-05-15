@@ -1,12 +1,12 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/AndroidManifest.xml",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/ams_runtime.cpp",
       "selection": {
         "end": {
           "column": 0,
-          "index": 2287,
-          "line": 61
+          "index": 0,
+          "line": 0
         },
         "start": {
           "column": 0,
@@ -14,7 +14,97 @@
           "line": 0
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
+      "selection": {
+        "end": {
+          "column": 4,
+          "index": 1765,
+          "line": 73
+        },
+        "start": {
+          "column": 4,
+          "index": 1765,
+          "line": 73
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_main.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1688,
+          "line": 46
+        },
+        "start": {
+          "column": 0,
+          "index": 1688,
+          "line": 46
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_vm.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2443,
+          "line": 69
+        },
+        "start": {
+          "column": 0,
+          "index": 2443,
+          "line": 69
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/include/binder_vm.h",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 437,
+          "line": 23
+        },
+        "start": {
+          "column": 0,
+          "index": 437,
+          "line": 23
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_jni_bridge.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2560,
+          "line": 66
+        },
+        "start": {
+          "column": 0,
+          "index": 2560,
+          "line": 66
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_fuse_ops.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1136,
+          "line": 34
+        },
+        "start": {
+          "column": 0,
+          "index": 1136,
+          "line": 34
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/AndroidManifest.xml"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_fuse_ops.cpp"
 }
