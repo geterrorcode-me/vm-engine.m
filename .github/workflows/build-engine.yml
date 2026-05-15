@@ -33,6 +33,7 @@ jobs:
           name: vmeer-engine-modular
           path: vmeer-module/build/outputs/aar/vmeer-module-release.aar
 
+<<<<<<< HEAD
       # PERBAIKAN FINAL: Upload Binary Native (vmeerd & libvmeer_engine.so)
       - name: Upload Native Binaries (vmeerd & libvmeer)
         if: success()
@@ -44,3 +45,15 @@ jobs:
             vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/vmeerd
             vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/libvmeer_engine.so
           if-no-files-found: error
+=======
+          # --- PERBAIKAN TAMBAHAN: Upload Native Binaries (vmeerd & .so) ---
+      - name: Upload Native Binaries (vmeerd & libvmeer)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmeer-native-binaries-arm64
+          # Mengambil langsung dari folder build C++ Ninja untuk arm64-v8a
+          path: |
+            vmeer-module/.cxx/**/arm64-v8a/vmeerd
+            vmeer-module/.cxx/**/arm64-v8a/*.so
+>>>>>>> branch 'master' of https://github.com/geterrorcode-me/vm-engine.m.git
