@@ -1,10 +1,10 @@
 apply plugin: 'com.android.library'
 
 android {
-    // Tambahkan namespace di bawah ini (bebas, tapi biasanya format package)
     namespace 'com.vmeer.engine'
-    
     compileSdkVersion 34
+    
+    // Sesuaikan NDK dengan yang terinstall di SDK Manager kamu
     ndkVersion "25.2.9519653"
 
     defaultConfig {
@@ -24,20 +24,32 @@ android {
 
     externalNativeBuild {
         cmake {
+            // Pastikan path ini benar-benar mengarah ke file CMakeLists.txt kamu
             path "src/main/jni/CMakeLists.txt"
+            version "3.22.1+"
         }
     }
     
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    
-    
-    dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
-    // Atau secara spesifik:
-    // implementation files('libs/android-mirror.jar')
+
+    // Opsi tambahan untuk memastikan library native diekstrak
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
+
+// BLOK DEPENDENCIES HARUS DI LUAR BLOK ANDROID
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    
+    // Jika mirror.jar ada di folder libs, baris di atas sudah otomatis menyertakannya.
+    // Jika ingin lebih eksplisit, gunakan baris di bawah ini:
+    // implementation files('libs/mirror.jar')
 }

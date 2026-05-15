@@ -110,13 +110,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 1414,
+          "line": 37
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 1414,
+          "line": 37
         }
       }
     },
@@ -124,14 +124,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/build.gradle",
       "selection": {
         "end": {
-          "column": 7,
-          "index": 897,
-          "line": 40
+          "column": 0,
+          "index": 1464,
+          "line": 55
         },
         "start": {
-          "column": 7,
-          "index": 897,
-          "line": 40
+          "column": 0,
+          "index": 1464,
+          "line": 55
         }
       }
     },
@@ -155,16 +155,46 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 868,
+          "line": 29
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 868,
+          "line": 29
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.gitignore",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 460,
+          "line": 33
+        },
+        "start": {
+          "column": 0,
+          "index": 460,
+          "line": 33
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/proguard-rules.pro",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2196,
+          "line": 63
+        },
+        "start": {
+          "column": 0,
+          "index": 2196,
+          "line": 63
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_squashfs_bridge.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/build.gradle"
 }

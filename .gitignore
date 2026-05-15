@@ -26,3 +26,9 @@ gen/
 Thumbs.db
 *.log
 .github/artifacts/
+
+# Jangan abaikan folder libs
+!vmeer-module/libs/
+# Jangan abaikan file jar di dalam libs
+!vmeer-module/libs/*.jar
+
