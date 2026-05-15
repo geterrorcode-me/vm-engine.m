@@ -18,6 +18,8 @@ android {
                 abiFilters "arm64-v8a"
             }
         }
+        
+        consumerProguardFiles 'consumer-rules.pro'
     }
 
     externalNativeBuild {
@@ -31,4 +33,11 @@ android {
             minifyEnabled false
         }
     }
+    
+    
+    dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    // Atau secara spesifik:
+    // implementation files('libs/android-mirror.jar')
+}
 }

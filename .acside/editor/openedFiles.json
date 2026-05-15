@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
       "selection": {
         "end": {
-          "column": 4,
-          "index": 1765,
-          "line": 73
+          "column": 0,
+          "index": 2437,
+          "line": 90
         },
         "start": {
-          "column": 4,
-          "index": 1765,
-          "line": 73
+          "column": 0,
+          "index": 2437,
+          "line": 90
         }
       }
     },
@@ -104,7 +104,52 @@
           "line": 34
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/consumer-rules.pro",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/build.gradle",
+      "selection": {
+        "end": {
+          "column": 7,
+          "index": 897,
+          "line": 40
+        },
+        "start": {
+          "column": 7,
+          "index": 897,
+          "line": 40
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/AndroidManifest.xml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2048,
+          "line": 48
+        },
+        "start": {
+          "column": 0,
+          "index": 2048,
+          "line": 48
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_fuse_ops.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/AndroidManifest.xml"
 }

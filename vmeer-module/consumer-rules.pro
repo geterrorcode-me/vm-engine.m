@@ -1,0 +1,2 @@
+-keep class black.android.** { *; }
+-keep class com.vmeer.engine.** { *; }
