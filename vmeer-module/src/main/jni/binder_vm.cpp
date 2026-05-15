@@ -51,11 +51,14 @@ int32_t remap_to_virtual(int32_t real_handle) {
     return handle_map[real_handle];
 }
 
-void start_binder_proxy() {
+/**
+ * PERBAIKAN: Nama fungsi diubah menjadi 'install_binder_hooks' 
+ * agar cocok dengan deklarasi extern "C" di vmeer_main.cpp
+ */
+void install_binder_hooks() {
     LOGI("vMeer: [Binder] Hooking IPCThreadState::transact...");
 
-    // FIX 1: Perbaiki typo 'shadowhook_hook_symname' menjadi 'shadowhook_hook_sym_name'
-    // FIX 2: Gunakan reinterpret_cast untuk parameter void* dan void** agar compiler senang
+    // Perbaikan typo 'shadowhook_hook_sym_name' (sudah benar)
     void* stub = shadowhook_hook_sym_name(
         "libbinder.so",
         "_ZN7android15IPCThreadState8transactEiijRKNS_6ParcelEPS1_j",
@@ -71,4 +74,9 @@ void start_binder_proxy() {
     }
 }
 
+// Alias agar kode lama tetap bisa memanggil start_binder_proxy jika perlu
+void start_binder_proxy() {
+    install_binder_hooks();
 }
+
+} // extern "C"
