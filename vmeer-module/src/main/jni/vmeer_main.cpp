@@ -22,7 +22,7 @@ extern "C" void vmeer_main_init() {
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "vMeer Main Module: Initializing...");
     
     // Panggil hooks yang spesifik untuk module ini
-    install_binder_hooks();
+    extern "C" void install_binder_hooks();
     
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "vMeer Main Module: Ready.");
 }
