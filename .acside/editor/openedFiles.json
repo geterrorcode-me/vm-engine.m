@@ -284,7 +284,22 @@
           "line": 21
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_engine.cpp",
+      "selection": {
+        "end": {
+          "column": 17,
+          "index": 942,
+          "line": 30
+        },
+        "start": {
+          "column": 17,
+          "index": 942,
+          "line": 30
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_fuse_ops.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_engine.cpp"
 }

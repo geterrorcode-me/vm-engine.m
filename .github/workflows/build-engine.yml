@@ -15,19 +15,32 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      # Ini adalah pengganti sdkmanager manual. 
-      # Dia akan menyiapkan SDK dan menyetujui lisensi otomatis.
+      # Menyiapkan Android SDK dan menyetujui semua lisensi secara otomatis
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # Melakukan kompilasi modul utama vMeer
       - name: Build vMeer AAR
         run: |
           chmod +x gradlew
           ./gradlew :vmeer-module:assembleRelease --no-daemon
 
+      # Upload file .AAR untuk kebutuhan integrasi Java/Kotlin
       - name: Upload AAR Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vmeer-engine-modular
           path: vmeer-module/build/outputs/aar/vmeer-module-release.aar
+
+      # PERBAIKAN FINAL: Upload Binary Native (vmeerd & libvmeer_engine.so)
+      - name: Upload Native Binaries (vmeerd & libvmeer)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmeer-native-binaries-arm64
+          # Menggunakan tanda bintang (*) untuk melewati hash acak buatan CMake/Ninja
+          path: |
+            vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/vmeerd
+            vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/libvmeer_engine.so
+          if-no-files-found: error
