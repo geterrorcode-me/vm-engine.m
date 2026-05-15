@@ -7,6 +7,7 @@
 
 #define LOG_TAG "vMeer_Binder"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static std::unordered_map<int32_t, int32_t> handle_map;
 static std::mutex binder_mtx;
@@ -25,17 +26,19 @@ static transact_t orig_transact = nullptr;
 
 // Fungsi Proxy yang akan dijalankan setiap kali ada komunikasi Binder
 int proxy_transact(void* self, int32_t handle, uint32_t code, void* data, void* reply, uint32_t flags) {
-    // Di sini kamu bisa menambahkan logic untuk membedah 'data' (Parcel)
-    // dan mengubah isi transaksinya secara real-time.
+    if (orig_transact == nullptr) return -1;
+    // Logic pembelokan bisa ditambahkan di sini
     return orig_transact(self, handle, code, data, reply, flags);
 }
 
 extern "C" {
 
 const char* resolve_virtual_service(const char* original_name) {
+    if (!original_name) return nullptr;
     std::lock_guard<std::mutex> lock(binder_mtx);
-    if (service_map.count(original_name)) {
-        return service_map[original_name].c_str();
+    auto it = service_map.find(original_name);
+    if (it != service_map.end()) {
+        return it->second.c_str();
     }
     return original_name;
 }
@@ -51,18 +54,20 @@ int32_t remap_to_virtual(int32_t real_handle) {
 void start_binder_proxy() {
     LOGI("vMeer: [Binder] Hooking IPCThreadState::transact...");
 
-    // Nama simbol ini biasanya standar di libbinder.so Android 10-14
-    void* stub = shadowhook_hook_symname(
+    // FIX 1: Perbaiki typo 'shadowhook_hook_symname' menjadi 'shadowhook_hook_sym_name'
+    // FIX 2: Gunakan reinterpret_cast untuk parameter void* dan void** agar compiler senang
+    void* stub = shadowhook_hook_sym_name(
         "libbinder.so",
         "_ZN7android15IPCThreadState8transactEiijRKNS_6ParcelEPS1_j",
-        (void*)proxy_transact,
-        (void**)&orig_transact
+        reinterpret_cast<void*>(proxy_transact),
+        reinterpret_cast<void**>(&orig_transact)
     );
 
     if (stub == nullptr) {
-        LOGI("vMeer: [Binder] Hook Failed! Error: %d", shadowhook_get_errno());
+        int err_num = shadowhook_get_errno();
+        LOGE("vMeer: [Binder] Hook Failed! Error: %s", shadowhook_to_errmsg(err_num));
     } else {
-        LOGI("vMeer: [Binder] Proxy Layer Active and Stealth.");
+        LOGI("vMeer: [Binder] Proxy Layer Active (libbinder.so)");
     }
 }
 
