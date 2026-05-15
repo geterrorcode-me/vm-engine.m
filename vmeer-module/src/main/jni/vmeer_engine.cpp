@@ -42,11 +42,10 @@ extern "C" void syncJavaProperties(JNIEnv* env);
 extern "C" {
 
 /**
- * FIX SHADOWHOOK: Helper untuk mencegah error "declared here"
- * Memastikan semua parameter di-cast ke tipe yang diminta oleh shadowhook.h
+ * FIX: Tambahkan [[maybe_unused]] agar compiler tidak menganggap ini error 
+ * jika belum dipanggil secara eksplisit di file ini.
  */
-static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
-    // shadowhook_hook_sym_name(const char*, const char*, void*, void**)
+[[maybe_unused]] static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
     void* stub = shadowhook_hook_sym_name(lib, sym, proxy, orig);
     if (!stub) {
         int err_num = shadowhook_get_errno();
@@ -127,7 +126,8 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
 /**
  * JNI_OnLoad:
- * Inisialisasi awal sistem saat library dimuat.
+ * Inisialisasi tunggal (Single Entry Point).
+ * PENTING: Hapus JNI_OnLoad dari vmeer_main.cpp agar tidak "duplicate symbol".
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
@@ -136,10 +136,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
 
     LOGI("vMeer Engine: Booting Core Systems...");
 
-    // 1. Stealth Engine Initialization
+    // 1. Stealth Engine Initialization (Must be first)
     init_vmeer_stealth();
     
-    // Gunakan MODE_UNIQUE untuk Dimensity 8300 (ARMv9)
+    // Gunakan MODE_UNIQUE untuk Dimensity 8300 (ARMv9 / Android 14+)
     if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
         LOGE("CRITICAL: ShadowHook failed to initialize!");
         return JNI_ERR;
