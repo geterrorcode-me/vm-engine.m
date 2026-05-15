@@ -50,13 +50,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 2753,
-          "line": 74
+          "index": 2259,
+          "line": 58
         },
         "start": {
           "column": 0,
-          "index": 2753,
-          "line": 74
+          "index": 2259,
+          "line": 58
         }
       }
     },
@@ -269,7 +269,22 @@
           "line": 0
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_binder_guard.cpp",
+      "selection": {
+        "end": {
+          "column": 37,
+          "index": 849,
+          "line": 21
+        },
+        "start": {
+          "column": 37,
+          "index": 849,
+          "line": 21
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_main.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_binder_guard.cpp"
 }

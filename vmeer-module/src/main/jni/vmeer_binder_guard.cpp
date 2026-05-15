@@ -19,7 +19,7 @@ static int vmeer_proxy_transact(void* instance, uint32_t code, void* data, void*
 void install_vmeer_binder_hooks() {
     // ShadowHook akan secara otomatis melakukan 'Instruction Refactoring'
     // Ini mengubah kode asli menjadi trampolin yang tidak terlihat seperti hook standar
-    void* stub = shadowhook_hook_symname(
+    void* stub = shadowhook_hook_sym_name(
         "libbinder.so",
         "_ZN7android15IPCThreadState8transactEiRKNS_6ParcelEPS1_j",
         (void*)vmeer_proxy_transact,
