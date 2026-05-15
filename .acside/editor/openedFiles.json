@@ -35,13 +35,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 5196,
-          "line": 169
+          "index": 1688,
+          "line": 46
         },
         "start": {
           "column": 0,
-          "index": 5196,
-          "line": 169
+          "index": 0,
+          "line": 0
         }
       }
     },
@@ -200,16 +200,16 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 4799,
-          "line": 155
+          "index": 5212,
+          "line": 171
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 5212,
+          "line": 171
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_main.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }

@@ -18,13 +18,17 @@
 #include "include/vmeer_zygote.h"
 #include "include/vmeer_context.h"
 #include "include/vmeer_vfs.h"
-#include "include/vmeer_system.h" // Pastikan header ini ada
+#include "include/vmeer_system.h" 
 
 // --- Logic Modules ---
 #include "binder_engine.h"
 #include "sensor_engine.h"
 #include "vmeer_pms.h"
 #include "egl_bridge.h"
+
+// --- FUSE & ZSTD Headers ---
+#include <fuse.h>
+#include <zstd.h>
 
 // --- ART VM Bridge ---
 extern "C" void init_art_hook(JNIEnv* env);
@@ -38,9 +42,21 @@ extern "C" void syncJavaProperties(JNIEnv* env);
 extern "C" {
 
 /**
+ * FIX SHADOWHOOK: Helper untuk mencegah error "declared here" 
+ * Memastikan semua pointer di-cast dengan benar ke (void*) dan (void**).
+ */
+static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
+    void* stub = shadowhook_hook_sym_name(lib, sym, proxy, orig);
+    if (!stub) {
+        int err_num = shadowhook_get_errno();
+        LOGE("Hook Failed: %s:%s | %s", lib, sym, shadowhook_to_errmsg(err_num));
+    }
+    return stub;
+}
+
+/**
  * requestNamespaceSetup:
- * Menghubungi vmeerd untuk isolasi filesystem.
- * Sekarang mengirimkan vuid agar daemon bisa melakukan chown.
+ * Berkomunikasi dengan vmeerd untuk persiapan isolasi storage.
  */
 bool requestNamespaceSetup(const char* pkgName, int vuid) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -54,7 +70,6 @@ bool requestNamespaceSetup(const char* pkgName, int vuid) {
 
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
         char cmd[512];
-        // Format baru: PREPARE_STORAGE:pkg_name:vuid
         snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s:%d", pkgName, vuid);
         
         if (send(sock, cmd, strlen(cmd), 0) > 0) {
@@ -73,7 +88,7 @@ bool requestNamespaceSetup(const char* pkgName, int vuid) {
 
 /**
  * setupVM:
- * Konfigurasi utama saat aplikasi guest akan dijalankan.
+ * Entry point utama dari Java untuk konfigurasi Virtual Machine.
  */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
@@ -85,16 +100,15 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     const char *path = env->GetStringUTFChars(mirrorPath, nullptr);
     
-    // 1. Update Runtime Context (Penting: Set sebelum request storage)
+    // 1. Update Context (Set path mirror & vUID)
     auto& vContext = vmeer::RuntimeContext::Get();
     vContext.SetVirtualUid(vUid);
     vContext.SetMirrorPath(path);
 
-    // 2. Request Namespace & Storage Setup ke vmeerd
-    // Menggunakan package default atau bisa diambil dari context
+    // 2. Storage & Namespace Isolation via Daemon
     requestNamespaceSetup("com.vmeer.guest", vUid);
 
-    // 3. JNI & ART Setup
+    // 3. JNI, ART & Mirror Injection
     init_art_hook(env);
     
     jclass context_clazz = env->GetObjectClass(context);
@@ -103,53 +117,55 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     perform_mirror_injection(env, class_loader, path);
 
-    // 4. Sinkronisasi Identitas Java (Build.MODEL, dll)
+    // 4. Device Identity Spoofing (Java Level)
     syncJavaProperties(env);
 
     env->ReleaseStringUTFChars(mirrorPath, path);
-    LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
+    LOGI("vMeer Engine: VM Config for vUID %d is ACTIVE.", vUid);
 }
 
 /**
  * JNI_OnLoad:
- * Inisialisasi awal saat library dimuat.
+ * Inisialisasi awal saat .so dimuat ke memori.
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
     JNIEnv* env;
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
 
-    LOGI("vMeer Engine: Initializing Core Systems...");
+    LOGI("vMeer Engine: Booting Core Systems...");
 
-    // 1. Stealth Engine Initialization
+    // 1. Stealth & Hooking Engine
     init_vmeer_stealth();
+    
+    // SHADOWHOOK_MODE_UNIQUE sangat disarankan untuk Dimensity 8300 (ARMv9)
     if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
-        LOGE("Critical: ShadowHook failed!");
+        LOGE("CRITICAL: ShadowHook Initialization Failed!");
         return JNI_ERR;
     }
 
-    // 2. Synchronization & Core Hooks
+    // 2. Zygote & Shared State
     vmeer::helper::ConnectSharedState();
     vmeer::zygote::HookForkAndSpecialize();
 
-    // 3. Services & Spoofing Activation
+    // 3. Activation of Spoofing Modules
     start_binder_proxy();
     vmeer::binder::InitHooks();
-    start_virtual_system_services(); // Property Spoofing
-    start_egl_bridge();              // GPU Spoofing
-    vmeer::sensor::InitHooks();      // Sensor Jitter
+    start_virtual_system_services(); 
+    start_egl_bridge();              
+    vmeer::sensor::InitHooks();      
 
-    // 4. VFS Engine (Redirection & Cloaking)
+    // 4. VFS Engine (Menggunakan libfuse3 & libzstd yang baru di-build)
     vmeer::vfs::StartVFSEngine();
 
-    LOGI("vMeer Engine: Standby - Awaiting setupVM");
+    LOGI("vMeer Engine: Core v1.0.0-STABLE - Status: READY");
     
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
     (void)vm; (void)reserved;
-    LOGI("vMeer Engine: Engine Detached.");
+    LOGI("vMeer Engine: Engine Detached from Process.");
 }
 
 } // extern "C"
