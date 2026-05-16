@@ -1,11 +1,18 @@
-name: Build vMeer Engine Modular
-on: [push, pull_request]
+name: Build vMeer Engine (ARM64 Native)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-engine:
+    # Menggunakan runner native ARM64 untuk mempercepat & menstabilkan build NDK/CMake
+    runs-on: ubuntu-latest-arm64
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -13,17 +20,17 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      # Menyiapkan Android SDK dan menyetujui semua lisensi secara otomatis
+      # Mengonfigurasi Android SDK & NDK yang kompatibel dengan Linux ARM64
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Melakukan kompilasi modul utama vMeer
-      - name: Build vMeer AAR
-        run: |
-          chmod +x gradlew
-          ./gradlew :vmeer-module:assembleRelease --no-daemon
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Menjalankan proses kompilasi untuk modul engine
+      - name: Compile vMeer Engine Module
+        run: ./gradlew :vmeer-module:assembleRelease
 
       # Upload file .AAR untuk kebutuhan integrasi Java/Kotlin
       - name: Upload AAR Artifact
