@@ -178,12 +178,14 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     }
 
     // ====================================================================
-    // 🔍 JALUR TRACER PINTO KEMATIAN NATIVE
+    // 🔍 JALUR TRACER PINTO KEMATIAN NATIVE (MODIFIKASI SEMENTARA BYPASS ART HOOK)
     // ====================================================================
-    LOGI("vMeer_Engine: [TRACER 1] Menuju pemanggilan init_art_hook...");
-    init_art_hook(env);
+    LOGI("vMeer_Engine: [TRACER 1] Mengabaikan eksekusi init_art_hook mentah pada Android 15...");
     
-    LOGI("vMeer_Engine: [TRACER 2] init_art_hook lolos! Memeriksa objek context...");
+    // Penanganan sementara: Melewati pemanggilan yang memicu crash SIGSEGV
+    // init_art_hook(env); 
+    
+    LOGI("vMeer_Engine: [TRACER 2] Tahap ART Hook dilewati aman. Memeriksa objek context...");
     if (context == nullptr) {
         LOGE("vMeer_Engine: CRITICAL - Parameter 'context' dari Java bernilai NULL!");
         env->ReleaseStringUTFChars(mirrorPath, path);
