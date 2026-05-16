@@ -1,4 +1,4 @@
-name: Build vMeer Engine (ARM64 Native)
+name: Build vMeer Engine (Stable Cross-Compile)
 
 on:
   push:
@@ -8,7 +8,8 @@ on:
 
 jobs:
   build-engine:
-    runs-on: ubuntu-24.04-arm
+    # Menggunakan runner PC standar karena compiler NDK Google berbasis x86_64
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
@@ -20,30 +21,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # PERBAIKAN 1: Buat & arahkan Android SDK ke dalam folder internal workspace ($GITHUB_WORKSPACE)
-      - name: Configure Android SDK Path
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/android-sdk/licenses"
-          echo "ANDROID_HOME=$GITHUB_WORKSPACE/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-sdk/ndk-bundle" >> $GITHUB_ENV
-
-      # PERBAIKAN 2: Set nilai absolut workspace ke local.properties agar Gradle patuh
-      - name: Create local.properties
-        run: |
-          echo "sdk.dir=$GITHUB_WORKSPACE/android-sdk" > local.properties
-
-      # PERBAIKAN 3: Menyuntikkan lisensi ke dalam folder workspace yang sudah pasti diizinkan
-      - name: Accept Android SDK & NDK Licenses
-        run: |
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-license"
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-preview-license"
-          echo "d56f173417b0b47a87c53304cd24005941833e70" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-googletv-license"
-          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-arm-dbt-license"
+      # Menggunakan action resmi untuk setup SDK & NDK yang stabil di arsitektur x86_64
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Eksekusi kompilasi biner native
+      # Jalankan kompilasi modul engine
       - name: Compile vMeer Engine Module
         run: ./gradlew :vmeer-module:assembleRelease
 
