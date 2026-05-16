@@ -87,6 +87,53 @@ bool requestNamespaceSetup(const char* pkgName, int vuid) {
 }
 
 /**
+ * NEW JNI BRIDGE: sendDaemonCommand
+ * Jembatan komunikasi IPC dari Kotlin (com.vmeer.io.VMeerEngine) ke vmeerd daemon.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstring command_str) {
+    (void)thiz;
+
+    // 1. Ambil string perintah dari Java layer
+    const char *native_cmd = env->GetStringUTFChars(command_str, nullptr);
+    std::string cmd(native_cmd);
+    env->ReleaseStringUTFChars(command_str, native_cmd);
+
+    // 2. Buka client Unix Domain Socket
+    int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (client_fd < 0) {
+        LOGE("vMeer JNI: Gagal membuat socket client.");
+        return env->NewStringUTF("ERR_SOCKET_FAILED");
+    }
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0'; // Abstract socket namespace marker
+    strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
+
+    // 3. Hubungkan ke core daemon vmeerd
+    if (connect(client_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        LOGE("vMeer JNI: Koneksi ke daemon ditolak (vmeerd mati).");
+        close(client_fd);
+        return env->NewStringUTF("ERR_DAEMON_DEAD");
+    }
+
+    // 4. Kirim paket payload perintah
+    send(client_fd, cmd.c_str(), cmd.length(), 0);
+
+    // 5. Tangkap respons balik dari vmeerd (OK / ERR)
+    char buffer[32] = {0};
+    ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+    close(client_fd);
+
+    if (bytes_read > 0) {
+        return env->NewStringUTF(buffer); // Kembalikan string "OK" ke Kotlin
+    }
+    return env->NewStringUTF("ERR_NO_RESP");
+}
+
+/**
  * setupVM:
  * Konfigurasi Virtual Machine yang dipanggil dari Java level.
  */
@@ -127,7 +174,6 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 /**
  * JNI_OnLoad:
  * Inisialisasi tunggal (Single Entry Point).
- * PENTING: Hapus JNI_OnLoad dari vmeer_main.cpp agar tidak "duplicate symbol".
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;

@@ -42,7 +42,8 @@ include_directories(
 # 3. LIST SOURCE FILES
 # ==========================================================
 set(VMEER_SOURCES
-    vmeer_engine.cpp 
+    vmeer_engine.cpp
+    vmeer_jni.cpp
     vmeer_core.cpp
     vmeer_context.cpp
     vmeer_db.cpp
