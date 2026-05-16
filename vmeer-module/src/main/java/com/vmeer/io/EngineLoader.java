@@ -9,21 +9,14 @@ public class EngineLoader {
 
     static {
         try {
-            Log.i(TAG, "Mulai memuat sub-modul virtualisasi secara sekuensial...");
+            Log.i(TAG, "Mulai memuat core engine vMeerOS...");
             
-            // 1. FONDASI SUBSYSTEM: Muat runtime Android virtual & Binder IPC
+            // ====================================================================
+            // PERBAIKAN KRUSIAL: Pangkas habis pemanggilan beruntun yang bikin crash.
+            // Cukup muat binder_vm (untuk memuaskan dependensi awal) dan vmeer_engine.
+            // Android akan otomatis memuat art_vm dan romfs_vm via target_link_libraries CMake.
+            // ====================================================================
             System.loadLibrary("binder_vm");
-            System.loadLibrary("art_vm");
-            
-            // 2. VFS LAYER: Muat sistem file SquashFS (readonly.bin reader)
-            System.loadLibrary("romfs_vm");
-            
-            // 3. GRAPHICS LAYER: Muat buffer layar dan jembatan EGL SwiftShader
-            System.loadLibrary("bufferqueue_vm");
-            System.loadLibrary("egl_bridge");
-            System.loadLibrary("surface_vm");
-            
-            // 4. MAIN CORE JNI: Satukan semua subsistem ke dalam JNI Engine Utama
             System.loadLibrary("vmeer_engine");
             
             isAllLibraryLoaded = true;
