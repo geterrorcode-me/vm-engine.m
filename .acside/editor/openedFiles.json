@@ -1,20 +1,50 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeerd.cpp",
       "selection": {
         "end": {
-          "column": 23,
-          "index": 119,
-          "line": 6
+          "column": 0,
+          "index": 3228,
+          "line": 88
         },
         "start": {
-          "column": 23,
-          "index": 119,
-          "line": 6
+          "column": 0,
+          "index": 3228,
+          "line": 88
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_bridge.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1584,
+          "line": 34
+        },
+        "start": {
+          "column": 0,
+          "index": 1584,
+          "line": 34
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/java/com/vmeer/io/EngineLoader.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1908,
+          "line": 55
+        },
+        "start": {
+          "column": 0,
+          "index": 1908,
+          "line": 55
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/java/com/vmeer/io/EngineLoader.java"
 }
