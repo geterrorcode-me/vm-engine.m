@@ -45,6 +45,28 @@
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+// ====================================================================
+// NDK COMPATIBILITY LAYER: Definisi manual jika NDK Actions pakai header jadul
+// ====================================================================
+#ifndef UFFDIO_MOVE
+#define UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES ((__u64)1<<0)
+
+struct uffdio_move {
+    __u64 dst;
+    __u64 src;
+    __u64 len;
+    __u64 mode;
+    __s64 move;
+};
+
+#define UFFDIO_MOVE _IOWR(UFFD_IOC_MAGIC, _UFFDIO_MOVE, struct uffdio_move)
+#endif
+
+#ifndef _UFFDIO_MOVE
+#define _UFFDIO_MOVE (0x05)
+#endif
+// ====================================================================
+
 // --- Fungsi eksternal dari modul lain ---
 extern "C" void init_art_hook(JNIEnv* env);
 extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
@@ -59,7 +81,7 @@ struct FaultHandlerArgs {
 };
 
 // ====================================================================
-// INTERNAL HANDLER (C++ Linkage): Diletakkan di luar extern "C"
+// INTERNAL HANDLER (C++ Linkage)
 // ====================================================================
 static void* UserfaultfdHandlerThread(void* arg) {
     auto* args = static_cast<FaultHandlerArgs*>(arg);
