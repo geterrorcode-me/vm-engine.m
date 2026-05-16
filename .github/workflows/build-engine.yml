@@ -8,7 +8,6 @@ on:
 
 jobs:
   build-engine:
-    # PERBAIKAN: Menggunakan label runner ARM64 resmi yang didukung GitHub
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -32,10 +31,20 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
+      # PERBAIKAN: Menyetujui semua lisensi Android SDK & NDK secara otomatis
+      - name: Accept Android SDK & NDK Licenses
+        run: |
+          mkdir -p "$ANDROID_SDK_ROOT/licenses"
+          # Membuat tanda persetujuan lisensi standar Google SDK & NDK
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
+          echo "d56f173417b0b47a87c53304cd24005941833e70" > "$ANDROID_SDK_ROOT/licenses/android-googletv-license"
+          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "$ANDROID_SDK_ROOT/licenses/android-sdk-arm-dbt-license"
+
+      # Eksekusi kompilasi modul engine murni secara native (aarch64 ke aarch64)
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Eksekusi kompilasi modul engine murni secara native (aarch64 ke aarch64)
       - name: Compile vMeer Engine Module
         run: ./gradlew :vmeer-module:assembleRelease
 
