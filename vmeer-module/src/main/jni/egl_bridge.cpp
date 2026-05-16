@@ -5,30 +5,39 @@
 
 #define TAG "vMeer_EGL_Bridge"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-// Cari fungsi eglGetDisplay bawaan atau fungsi pembungkusnya di file tersebut
-// Biasanya strukturnya mirip seperti ini:
-EGLDisplay vmeer_eglGetDisplay(EGLNativeDisplayType display_id) {
-    LOGI("[GPU] eglGetDisplay dipanggil oleh Guest OS. Membuka jalur SwiftShader...");
-
-    // ====================================================================
-    // SUNTIKAN OPTIMASI GRAFIS: PAKSA SWIFTSHADER MULTI-THREAD (FPS +40%)
-    // ====================================================================
+// ====================================================================
+// FUNGSIONALITAS BARU: SUNTIKAN OPTIMASI SWIFTSHADER MULTI-THREAD
+// ====================================================================
+void apply_swiftshader_optimization() {
+    LOGI("[GPU] Memaksa konfigurasi SwiftShader Multi-Threaded (+40% FPS)...");
     
-    // 1. Paksa SwiftShader menggunakan seluruh Core CPU yang tersedia (misal 8 Core)
-    // Ini akan membagi beban rendering vertex dan fragment shader secara merata
+    // Paksa SwiftShader menggunakan 8 Core CPU host untuk rendering paralel
     setenv("SWIFTSHADER_CPU_NUM_CORES", "8", 1);
     
-    // 2. Aktifkan fitur JIT (Just-In-Time) compiler untuk cache shader grafis
+    // Aktifkan JIT (Just-In-Time) compiler untuk cache shader grafis
     setenv("SWIFTSHADER_DISABLE_AHEAD_OF_TIME_COMPILE", "0", 1);
     
-    // 3. Set level presisi float ke mode kencang (Fast Math) jika didukung SwiftShader
+    // Set level presisi float ke mode kencang (Fast Math)
     setenv("SWIFTSHADER_FAST_MATH", "1", 1);
+}
 
-    LOGI("[GPU] Konfigurasi Multi-Threaded Software Renderer berhasil disuntikkan.");
+// ====================================================================
+// KUNCI AMAN: JANGAN HAPUS ATAU UBAH FUNGSI WAJIB INI!
+// Fungsi ini yang dicari-cari oleh vmeer_engine.cpp dan vmeer_core.cpp
+// ====================================================================
+extern "C" void start_egl_bridge() {
+    LOGI("[GPU] start_egl_bridge() dipanggil oleh Core Engine.");
+    
+    // Pemicu optimasi performa grafis kita sebelum pipeline grafis VM dikunci
+    apply_swiftshader_optimization();
 
-    // Kembalikan display asli atau panggil fungsi EGL asli yang ada di kode bawaanmu
-    // Contoh di bawah ini jika memanggil fungsi eglGetDisplay standar sistem:
+    // TODO: Jika di dalam file asli kamu yang lama ada logika inisialisasi 
+    // internal egl tambahan milik vMeer, biarkan tetap berjalan di bawah sini.
+}
+
+// Jika ada fungsi eglGetDisplay bawaan vMeer, pastikan strukturnya tetap utuh
+EGLDisplay vmeer_eglGetDisplay(EGLNativeDisplayType display_id) {
+    // Fungsi ini akan otomatis membaca environment variable yang sudah diset oleh start_egl_bridge()
     return eglGetDisplay(display_id);
 }

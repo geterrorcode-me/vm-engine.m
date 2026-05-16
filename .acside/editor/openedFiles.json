@@ -20,13 +20,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 1584,
-          "line": 34
+          "index": 1864,
+          "line": 43
         },
         "start": {
           "column": 0,
-          "index": 1584,
-          "line": 34
+          "index": 1864,
+          "line": 43
         }
       }
     },
@@ -46,5 +46,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/java/com/vmeer/io/EngineLoader.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_bridge.cpp"
 }
