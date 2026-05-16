@@ -75,7 +75,6 @@ static binder_status_t proxy_AIBinder_transact(AIBinder* binder, transaction_cod
     return orig_AIBinder_transact(binder, code, in, out, flags);
 }
 
-// OPTIMALISASI: Non-blocking socket dengan pengaman selektif agar UI tidak freeze
 static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     int sock = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (sock < 0) return false;
@@ -90,10 +89,9 @@ static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     if (res < 0 && errno != EINPROGRESS) {
         LOGW("vMeer_Engine: Daemon vmeerd belum aktif atau tidak merespons. Melewati setup namespace.");
         close(sock);
-        return true; // Bypass true agar sequence inisialisasi Java tidak stuck/menggantung
+        return true; 
     }
 
-    // Tunggu maksimal 1 detik menggunakan select() demi mencegah ANR / Timeout panjang
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
@@ -124,7 +122,6 @@ Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv* env, jclass clazz, j
     const char *pkg = env->GetStringUTFChars(pkgName, nullptr);
     LOGI("vMeer_Engine: Mempersiapkan Sandbox VFS untuk paket: %s (vUID: %d)", pkg, vUid);
     
-    // Sinkronisasi data ke struktur singleton RuntimeContext yang baru diperbarui
     auto& vContext = vmeer::RuntimeContext::Get();
     vContext.SetTargetPackage(pkg);
     vContext.SetVirtualUid(vUid);
@@ -180,13 +177,45 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
         LOGE("vMeer_Binder: Kritis! Sistem host tidak memiliki libbinder_ndk.so.");
     }
 
+    // ====================================================================
+    // 🔍 JALUR TRACER PINTO KEMATIAN NATIVE
+    // ====================================================================
+    LOGI("vMeer_Engine: [TRACER 1] Menuju pemanggilan init_art_hook...");
     init_art_hook(env);
     
-    jclass context_clazz = env->GetObjectClass(context);
-    jmethodID get_class_loader_mid = env->GetMethodID(context_clazz, "getClassLoader", "()Ljava/lang/ClassLoader;");
-    jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
+    LOGI("vMeer_Engine: [TRACER 2] init_art_hook lolos! Memeriksa objek context...");
+    if (context == nullptr) {
+        LOGE("vMeer_Engine: CRITICAL - Parameter 'context' dari Java bernilai NULL!");
+        env->ReleaseStringUTFChars(mirrorPath, path);
+        return;
+    }
 
+    LOGI("vMeer_Engine: [TRACER 3] Membuka kelas context...");
+    jclass context_clazz = env->GetObjectClass(context);
+    if (context_clazz == nullptr) {
+        LOGE("vMeer_Engine: Gagal mendapatkan jclass dari objek context.");
+        env->ReleaseStringUTFChars(mirrorPath, path);
+        return;
+    }
+
+    LOGI("vMeer_Engine: [TRACER 4] Mencari method getClassLoader...");
+    jmethodID get_class_loader_mid = env->GetMethodID(context_clazz, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    if (get_class_loader_mid == nullptr) {
+        LOGE("vMeer_Engine: Method getClassLoader() tidak ditemukan!");
+        env->ReleaseStringUTFChars(mirrorPath, path);
+        return;
+    }
+
+    LOGI("vMeer_Engine: [TRACER 5] Memanggil getClassLoader via JNI...");
+    jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
+    if (class_loader == nullptr) {
+        LOGE("vMeer_Engine: Hasil pemanggilan getClassLoader() bernilai NULL!");
+    }
+
+    LOGI("vMeer_Engine: [TRACER 6] Masuk ke perform_mirror_injection...");
     perform_mirror_injection(env, class_loader, path);
+    
+    LOGI("vMeer_Engine: [TRACER 7] Masuk ke syncJavaProperties...");
     syncJavaProperties(env);
 
     env->ReleaseStringUTFChars(mirrorPath, path);
