@@ -34,7 +34,6 @@ bool RuntimeContext::Initialize(const std::string& vm_id, const std::string& tar
  * Bridge menuju Virtual Package Manager.
  */
 pms::PMSRuntime& RuntimeContext::Package() { 
-    // Pastikan namespace 'pms' sudah sesuai dengan deklarasi di vmeer_pms.h
     return pms::PMSRuntime::Get(); 
 }
 
@@ -71,7 +70,6 @@ VirtualIdentity* RuntimeContext::GetIdentity(const std::string& proc_name) {
  */
 void RuntimeContext::Heartbeat() {
     LOGI("vMeer Context: State synchronization heartbeat executed.");
-    // Di sini kamu bisa menambahkan sinkronisasi Shared Memory atau Database.
 }
 
 } // namespace vmeer

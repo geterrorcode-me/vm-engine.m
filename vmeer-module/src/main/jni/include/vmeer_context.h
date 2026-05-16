@@ -46,7 +46,7 @@ public:
     void RegisterVirtualApp(const std::string& pkg, int v_uid);
     VirtualIdentity* GetIdentity(const std::string& proc_name);
 
-    // --- High-End VM Setters (Digunakan oleh setupVM) ---
+    // --- High-End VM Setters (Digunakan oleh setupVM & prepareStorageSandbox) ---
     void SetVirtualUid(int uid) { 
         std::lock_guard<std::mutex> lock(registry_mutex_);
         m_vuid = uid; 
@@ -55,6 +55,12 @@ public:
     void SetMirrorPath(const std::string& path) { 
         std::lock_guard<std::mutex> lock(registry_mutex_);
         m_mirror_path = path; 
+    }
+
+    // PERBAIKAN KRUSIAL: Menambahkan setter untuk Target Package Name
+    void SetTargetPackage(const std::string& pkg) {
+        std::lock_guard<std::mutex> lock(registry_mutex_);
+        m_target_package = pkg;
     }
 
     // --- Getters ---
