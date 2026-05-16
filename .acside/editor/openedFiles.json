@@ -1,35 +1,20 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 7149,
-          "line": 224
+          "column": 23,
+          "index": 119,
+          "line": 6
         },
         "start": {
-          "column": 0,
-          "index": 7149,
-          "line": 224
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/surface_vm.cpp",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 2409,
-          "line": 66
-        },
-        "start": {
-          "column": 0,
-          "index": 2409,
-          "line": 66
+          "column": 23,
+          "index": 119,
+          "line": 6
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/surface_vm.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/.github/workflows/build-engine.yml"
 }

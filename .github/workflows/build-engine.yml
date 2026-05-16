@@ -9,7 +9,7 @@ on:
 jobs:
   build-engine:
     # Menggunakan runner native ARM64 untuk mempercepat & menstabilkan build NDK/CMake
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Repository
