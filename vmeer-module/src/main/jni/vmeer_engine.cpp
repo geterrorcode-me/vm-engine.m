@@ -28,82 +28,83 @@
 #include "include/vmeer_vfs.h"
 #include "include/vmeer_system.h" 
 
+// --- Logic Modules ---
+#include "binder_engine.h"
+#include "sensor_engine.h"
+#include "vmeer_pms.h"
+#include "egl_bridge.h"
+
+// --- FUSE & ZSTD Headers ---
+#include <fuse.h>
+#include <zstd.h>
+
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Alamat asli fungsi yang di-hook
+// Pointer fungsi asli untuk dipanggil kembali di dalam proxy
 static int (*orig_prctl)(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5) = nullptr;
 static void* (*orig_ipc_transact)(void* thiz, uint32_t code, const void* data, void* reply, uint32_t flags) = nullptr;
+
+extern "C" {
+void init_art_hook(JNIEnv* env);
+void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
+void syncJavaProperties(JNIEnv* env);
+}
 
 // ====================================================================
 // ADVANCED INTERCEPTOR: SECCOMP BYPASS VIA PRCTL SPOOFING
 // ====================================================================
 static int proxy_prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5) {
-    // Jika Guest OS (init) mencoba memeriksa status atau menyetel batasan seccomp lebih ketat
+    // Jika Guest OS (init) mencoba memeriksa status Seccomp kernel
     if (option == PR_GET_SECCOMP) {
-        // Tipu Guest OS seolah-olah Seccomp MATI (Mode 0) agar dia tidak panik dan mogok booting
+        // Tipu Guest OS seolah-olah Seccomp MATI (Mode 0) agar booting jalan terus
         return 0; 
     }
+    // Jika ada subsistem yang mencoba memperketat sandbox di tengah jalan
     if (option == PR_SET_SECCOMP) {
         LOGW("vMeer_Seccomp: Menggagalkan upaya penguncian sandboxing tambahan (PR_SET_SECCOMP).");
-        return 0; // Kembalikan sukses palsu
+        return 0; // Kembalikan sukses palsu ke pemanggil
     }
     return orig_prctl(option, arg2, arg3, arg4, arg5);
 }
 
 // ====================================================================
-// ADVANCED LINKER: PATTERN SCANNER UNTUK BINDER HYPEROS (ANDROID 15)
+// ADVANCED LINKER: SHADOWHOOK HIGH-LEVEL SYMBOL RESOLVER (HYPEROS FIX)
 // ====================================================================
-static void* FindBinderTransactByPattern() {
-    void* handle = dlopen("libbinder.so", RTLD_NOW);
-    if (!handle) return nullptr;
-
-    // Skenario 1: Coba cari simbol standar fallback dulu
-    const char* fallbacks[] = {
-        "_ZN7android15IPCThreadState8transactEijRKNS_14ParcelEPS1_j",
-        "_ZN7android15IPCThreadState8transactEijRKNS_6ParcelEPS1_j"
-    };
-    for (const char* sym : fallbacks) {
-        void* addr = dlsym(handle, sym);
-        if (addr) return addr;
+static void* FindBinderTransactBySymbolResolver() {
+    // Muat libbinder.so ke dalam memory space aplikasi menggunakan loader internal shadowhook
+    void* handle = shadowhook_dlopen("libbinder.so");
+    if (!handle) {
+        LOGE("vMeer_Binder: Gagal membuka objek libbinder.so via ShadowHook Loader.");
+        return nullptr;
     }
 
-    // Skenario 2: PATTERN SCANNING (Jika simbol disembunyikan total oleh Xiaomi)
-    // Memindai opcode standar dari fungsi IPCThreadState::transact pada arsitektur ARM64
-    // Ciri khas ARM64 Prologue: pacibsp / stp x29, x30, [sp, ...]
-    LOGW("vMeer_Binder: Simbol ELF disembunyikan. Memulai pemindaian biner kasar di memori...");
-    
-    FILE* maps = fopen("/proc/self/maps", "r");
-    if (!maps) return nullptr;
+    void* addr = nullptr;
 
-    char line[512];
-    uintptr_t start_addr = 0, end_addr = 0;
-    while (fgets(line, sizeof(line), maps)) {
-        if (strstr(line, "libbinder.so") && strstr(line, "r-xp")) { // Cari segmen executable
-            sscanf(line, "%lx-%lx", &start_addr, &end_addr);
+    // Daftar variasi tanda tangan simbol (Mangled Name) IPCThreadState::transact di Android 14 & 15
+    const char* mangled_symbols[] = {
+        "_ZN7android15IPCThreadState8transactEijRKNS_14ParcelEPS1_j", // Standard Android 14/15 64-bit
+        "_ZN7android15IPCThreadState8transactEijRKNS_6ParcelEPS1_j",  // Alternatif Vendor Custom
+        "_ZN7android15IPCThreadState8transactEiRKNS_14ParcelEPS1_j"    // Fallback Legacy
+    };
+
+    // Lakukan brute-force pencarian simbol privat di dalam tabel ELF (.symtab / .strtab)
+    for (const char* sym : mangled_symbols) {
+        addr = shadowhook_dlsym(handle, sym);
+        if (addr) {
+            LOGI("vMeer_Binder: MATCH SUCCESS! Menemukan simbol %s di alamat: %p", sym, addr);
             break;
         }
     }
-    fclose(maps);
 
-    if (start_addr && end_addr) {
-        // Nyari instruksi assembly khas transaksi binder ARM64 secara brutal
-        for (uintptr_t i = start_addr; i < end_addr - 16; i += 4) {
-            uint32_t* insn = reinterpret_cast<uint32_t*>(i);
-            // Contoh kecocokan register internal transaksi binder (AArch64)
-            if (insn[0] == 0xa9bf7bfd && insn[1] == 0x910003fd) { // stp x29, x30, [sp, #-16]!; mov x29, sp
-                LOGI("vMeer_Binder: PATTERN MATCH! Menemukan fungsi kandidat transact di: %p", (void*)i);
-                return reinterpret_cast<void*>(i);
-            }
-        }
-    }
-    return nullptr;
+    shadowhook_dlclose(handle);
+    return addr;
 }
 
 static void* proxy_binder_transact(void* thiz, uint32_t code, const void* data, void* reply, uint32_t flags) {
-    // Di sini tempat kamu menyaring atau memanipulasi transaksi antar-proses Guest OS
+    // Jembatan transaksi IPC Guest OS ke Host OS
     return orig_ipc_transact(thiz, code, data, reply, flags);
 }
 
@@ -137,10 +138,62 @@ static bool requestNamespaceSetup(const char* pkgName, int vuid) {
 }
 
 extern "C" {
-void init_art_hook(JNIEnv* env);
-void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
-void syncJavaProperties(JNIEnv* env);
 
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_isInitialized(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    return JNI_TRUE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstring command_str) {
+    (void)thiz;
+    const char *native_cmd = env->GetStringUTFChars(command_str, nullptr);
+    std::string cmd(native_cmd);
+    env->ReleaseStringUTFChars(command_str, native_cmd);
+
+    int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (client_fd < 0) {
+        LOGE("vMeer JNI: Gagal membuat socket client.");
+        return env->NewStringUTF("ERR_SOCKET_FAILED");
+    }
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0';
+    strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
+
+    if (connect(client_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        LOGE("vMeer JNI: Koneksi ke daemon ditolak (vmeerd mati).");
+        close(client_fd);
+        return env->NewStringUTF("ERR_DAEMON_DEAD");
+    }
+
+    send(client_fd, cmd.c_str(), cmd.length(), 0);
+
+    char buffer[32] = {0};
+    ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+    close(client_fd);
+
+    if (bytes_read > 0) {
+        return env->NewStringUTF(buffer);
+    }
+    return env->NewStringUTF("ERR_NO_RESP");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv *env, jclass clazz, jstring pkgName, jint vUid) {
+    (void)clazz;
+    const char *native_pkg = env->GetStringUTFChars(pkgName, nullptr);
+    bool result = requestNamespaceSetup(native_pkg, vUid);
+    env->ReleaseStringUTFChars(pkgName, native_pkg);
+    return result ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * setupVM: PROSES UTAMA KONFIGURASI ENGINE DAN MEMORY VIRTUAL
+ */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
     (void)clazz;
@@ -156,37 +209,51 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     requestNamespaceSetup("com.vmeer.guest", vUid);
 
+    // Buka file ROM secara langsung untuk dipetakan ke memori virtual space proses
     int rom_fd = open(path, O_RDONLY);
     if (rom_fd >= 0) {
         struct stat st;
         if (fstat(rom_fd, &st) == 0) {
             size_t rom_size = st.st_size;
+            
+            // Lakukan Direct Memory Mapping dari berkas ROM SquashFS secara sinkron.
             void* vma_addr = mmap(nullptr, rom_size, PROT_READ, MAP_PRIVATE, rom_fd, 0);
             if (vma_addr != MAP_FAILED) {
                 LOGI("vMeer_Engine: ROM sukses dipetakan via Zero-Copy Static Map di alamat %p", vma_addr);
             } else {
-                LOGE("vMeer_Engine: Gagal melakukan mmap ROM: %s", strerror(errno));
+                LOGE("vMeer_Engine: Gagal melakukan mmap ROM secara statis: %s", strerror(errno));
             }
         }
         close(rom_fd);
+    } else {
+        LOGE("vMeer_Engine: Gagal membuka berkas ROM SquashFS: %s", strerror(errno));
     }
 
-    // --- SUNTIKAN HOOK SECCOMP & PRCTL TEPAT SEBELUM BOOTING ---
+    // --- HOOK SECCOMP & PRCTL UNTUK MEMBUKA BLOKIR SYSCALL ---
     void* libc_handle = dlopen("libc.so", RTLD_NOW);
     if (libc_handle) {
         shadowhook_hook_sym_name("libc.so", "prctl", (void*)proxy_prctl, (void**)&orig_prctl);
         LOGI("vMeer_Seccomp: Interceptor prctl aktif. Pengelabuan Seccomp Mode 2 siap.");
     }
 
-    // --- RE-HOOK BINDER VIA PATTERN SCANNER ---
-    void* binder_transact_addr = FindBinderTransactByPattern();
+    // --- RE-HOOK BINDER VIA SHADOWHOOK INTERNAL RESOLVER ---
+    void* binder_transact_addr = FindBinderTransactBySymbolResolver();
     if (binder_transact_addr) {
         shadowhook_hook_func_addr(binder_transact_addr, (void*)proxy_binder_transact, (void**)&orig_ipc_transact);
-        LOGI("vMeer_Binder: SUCCESS - Binder Bridge berhasil dikunci via Pattern Scanning!");
+        LOGI("vMeer_Binder: SUCCESS - Binder Bridge berhasil dikunci mapan!");
     } else {
-        LOGE("vMeer_Binder: CRITICAL - Gagal menemukan basis alamat transaksi IPC!");
+        LOGE("vMeer_Binder: CRITICAL - Gagal menemukan simbol biner privat. Menjalankan fallback standar...");
+        void* libc_fallback = dlopen("libbinder.so", RTLD_NOW);
+        if (libc_fallback) {
+             void* fallback_addr = dlsym(libc_fallback, "_ZN7android15IPCThreadState8transactEijRKNS_14ParcelEPS1_j");
+             if (fallback_addr) {
+                 shadowhook_hook_func_addr(fallback_addr, (void*)proxy_binder_transact, (void**)&orig_ipc_transact);
+                 LOGI("vMeer_Binder: Fallback sukses mengunci simbol standar.");
+             }
+        }
     }
 
+    // Jalankan jembatan ART Java runtime milikmu
     init_art_hook(env);
     
     jclass context_clazz = env->GetObjectClass(context);
@@ -194,6 +261,7 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
 
     perform_mirror_injection(env, class_loader, path);
+
     syncJavaProperties(env);
 
     env->ReleaseStringUTFChars(mirrorPath, path);
@@ -206,10 +274,34 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
 
     LOGI("vMeer Engine: Booting Core Systems...");
-    init_vmeer_stealth();
-    shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
 
+    init_vmeer_stealth();
+    
+    int sh_status = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+    if (sh_status != 0) {
+        LOGW("WARNING: ShadowHook gagal inisialisasi (Code: %d). Berjalan dalam Fallback Mode.", sh_status);
+    } else {
+        LOGI("vMeer: ShadowHook Shared Engine successfully engaged.");
+    }
+
+    if (sh_status == 0) {
+        vmeer::helper::ConnectSharedState();
+        vmeer::zygote::HookForkAndSpecialize();
+        start_binder_proxy();
+        vmeer::binder::InitHooks();
+        start_virtual_system_services(); 
+        start_egl_bridge();              
+        vmeer::sensor::InitHooks();      
+        vmeer::vfs::StartVFSEngine();
+    }
+
+    LOGI("vMeer Engine: Status READY - Engine v1.0.0-STABLE");
     return JNI_VERSION_1_6;
+}
+
+JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
+    (void)vm; (void)reserved;
+    LOGI("vMeer Engine: Engine Detached.");
 }
 
 } // extern "C"
