@@ -20,35 +20,34 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Mengonfigurasi variabel jalur Android SDK bawaan dari lingkungan Runner ARM
+      # PERBAIKAN 1: Tembak langsung path absolut Android SDK bawaan Ubuntu Runner
       - name: Configure Android SDK Path
         run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk-bundle" >> $GITHUB_ENV
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
 
-      # Membuat file local.properties dinamis agar Gradle mengenali SDK host ARM
+      # PERBAIKAN 2: Tulis sdk.dir secara absolut di local.properties
       - name: Create local.properties
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
 
-      # PERBAIKAN: Menyetujui semua lisensi Android SDK & NDK secara otomatis
+      # PERBAIKAN 3: Suntik lisensi langsung ke path absolut SDK yang valid
       - name: Accept Android SDK & NDK Licenses
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT/licenses"
-          # Membuat tanda persetujuan lisensi standar Google SDK & NDK
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_SDK_ROOT/licenses/android-sdk-preview-license"
-          echo "d56f173417b0b47a87c53304cd24005941833e70" > "$ANDROID_SDK_ROOT/licenses/android-googletv-license"
-          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "$ANDROID_SDK_ROOT/licenses/android-sdk-arm-dbt-license"
+          mkdir -p "/usr/local/lib/android/sdk/licenses"
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "/usr/local/lib/android/sdk/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "/usr/local/lib/android/sdk/licenses/android-sdk-preview-license"
+          echo "d56f173417b0b47a87c53304cd24005941833e70" > "/usr/local/lib/android/sdk/licenses/android-googletv-license"
+          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "/usr/local/lib/android/sdk/licenses/android-sdk-arm-dbt-license"
 
-      # Eksekusi kompilasi modul engine murni secara native (aarch64 ke aarch64)
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Mulai kompilasi biner native
       - name: Compile vMeer Engine Module
         run: ./gradlew :vmeer-module:assembleRelease
 
-      # Upload file .AAR untuk kebutuhan integrasi Java/Kotlin di AndroidIDE
+      # Upload file .AAR untuk AndroidIDE
       - name: Upload AAR Artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -56,7 +55,7 @@ jobs:
           name: vmeer-engine-modular
           path: vmeer-module/build/outputs/aar/vmeer-module-release.aar
 
-      # Upload Binary Native (vmeerd & libvmeer_engine.so) hasil kompilasi ARM murni
+      # Upload Binary Native (vmeerd & libvmeer_engine.so)
       - name: Upload Native Binaries (vmeerd & libvmeer)
         if: success()
         uses: actions/upload-artifact@v4
