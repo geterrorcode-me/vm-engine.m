@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string>
 
-// --- System & Memory Handling (Tambahan untuk Penyelamatan Memory Kernel) ---
+// --- System & Memory Handling ---
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <linux/userfaultfd.h>
@@ -40,17 +40,17 @@
 #include <fuse.h>
 #include <zstd.h>
 
-// --- ART VM Bridge ---
-extern "C" void init_art_hook(JNIEnv* env);
-extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
-extern "C" void syncJavaProperties(JNIEnv* env);
-
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Struktur internal untuk melemparkan data ke background thread penanggung jawab page fault
+// --- Fungsi eksternal dari modul lain ---
+extern "C" void init_art_hook(JNIEnv* env);
+extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
+extern "C" void syncJavaProperties(JNIEnv* env);
+
+// Struktur data untuk melemparkan konteks ke thread fault handler
 struct FaultHandlerArgs {
     int uffd_fd;
     uintptr_t uffd_vma_start;
@@ -59,14 +59,13 @@ struct FaultHandlerArgs {
 };
 
 // ====================================================================
-// INTERNAL HANDLER: Mengurusi Page Fault ROM secara Asinkron di Background
+// INTERNAL HANDLER (C++ Linkage): Diletakkan di luar extern "C"
 // ====================================================================
 static void* UserfaultfdHandlerThread(void* arg) {
     auto* args = static_cast<FaultHandlerArgs*>(arg);
     int uffd = args->uffd_fd;
     size_t page_size = sysconf(_SC_PAGESIZE);
     
-    // Alokasikan buffer sementara di user space untuk membaca pecahan biner
     auto* page_buffer = static_cast<char*>(mmap(nullptr, page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     if (page_buffer == MAP_FAILED) {
         LOGE("vMeer_UFFD: FATAL - Gagal mengalokasikan page_buffer di user space!");
@@ -91,23 +90,18 @@ static void* UserfaultfdHandlerThread(void* arg) {
             break;
         }
 
-        // Tangkap trigger event jika container virtual kekurangan halaman memori
         if (msg.event == UFFD_EVENT_PAGEFAULT) {
             uintptr_t fault_address = msg.arg.pagefault.address;
             uintptr_t fault_page_aligned = fault_address & ~(page_size - 1);
             
-            // Hitung offset data biner SquashFS di berkas target
             off_t file_offset = fault_page_aligned - args->uffd_vma_start;
 
-            // Isi buffer dengan muatan asli dari berkas ROM target
             memset(page_buffer, 0, page_size);
             if (pread(args->rom_fd, page_buffer, page_size, file_offset) < 0) {
                 LOGE("vMeer_UFFD: Gagal membaca partisi ROM pada offset %lld", (long long)file_offset);
             }
 
-            // ----------------------------------------------------------------
-            // [LAPIS 1]: Jalur Utama - UFFDIO_MOVE (Zero-Copy Tercepat)
-            // ----------------------------------------------------------------
+            // [LAPIS 1]: UFFDIO_MOVE
             struct uffdio_move uffdio_move_args;
             uffdio_move_args.dst = fault_page_aligned;
             uffdio_move_args.src = reinterpret_cast<uintptr_t>(page_buffer);
@@ -115,12 +109,9 @@ static void* UserfaultfdHandlerThread(void* arg) {
             uffdio_move_args.mode = UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES;
 
             if (ioctl(uffd, UFFDIO_MOVE, &uffdio_move_args) == -1) {
-                // Di Android 15 POCO/Xiaomi, ini memicu "Interrupted system call" karena diblokir kernel
                 LOGW("vMeer_UFFD: UFFDIO_MOVE ditolak kernel Android 15 (%s). Mencoba Lapis 2...", strerror(errno));
 
-                // ----------------------------------------------------------------
-                // [LAPIS 2]: Fallback Kedua - UFFDIO_COPY
-                // ----------------------------------------------------------------
+                // [LAPIS 2]: UFFDIO_COPY
                 struct uffdio_copy uffdio_copy_args;
                 uffdio_copy_args.dst = fault_page_aligned;
                 uffdio_copy_args.src = reinterpret_cast<uintptr_t>(page_buffer);
@@ -131,14 +122,10 @@ static void* UserfaultfdHandlerThread(void* arg) {
                     LOGE("vMeer_UFFD: UFFDIO_COPY diblokir kernel/SELinux (%s)!", strerror(errno));
                     LOGW("vMeer_UFFD: Mengaktifkan EMERGENCY FALLBACK Lapis 3 (User-space Memcpy)...");
 
-                    // ----------------------------------------------------------------
-                    // [LAPIS 3]: Jalur Darurat Terakhir - Manual Memcpy + Forced Wake
-                    // Langkah ini membuat RenderInspector bebas dari "DequeueBuffer time out"
-                    // ----------------------------------------------------------------
+                    // [LAPIS 3]: Manual Memcpy + Forced Wake
                     mprotect(reinterpret_cast<void*>(fault_page_aligned), page_size, PROT_READ | PROT_WRITE);
                     memcpy(reinterpret_cast<void*>(fault_page_aligned), page_buffer, page_size);
                     
-                    // Paksa bangun thread sandbox yang tertahan via ioctl WAKE
                     struct uffdio_range uffdio_wake_args;
                     uffdio_wake_args.start = fault_page_aligned;
                     uffdio_wake_args.len = page_size;
@@ -156,31 +143,8 @@ static void* UserfaultfdHandlerThread(void* arg) {
     return nullptr;
 }
 
-extern "C" {
-
-/**
- * NEW JNI BRIDGE: isInitialized
- */
-JNIEXPORT jboolean JNICALL
-Java_com_vmeer_io_VMeerEngine_isInitialized(JNIEnv *env, jclass clazz) {
-    (void)env; (void)clazz;
-    return JNI_TRUE;
-}
-
-[[maybe_unused]] static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
-    void* stub = shadowhook_hook_sym_name(lib, sym, proxy, orig);
-    if (!stub) {
-        int err_num = shadowhook_get_errno();
-        LOGE("Hook Failed: %s:%s | %s", lib, sym, shadowhook_to_errmsg(err_num));
-    }
-    return stub;
-}
-
-/**
- * requestNamespaceSetup:
- * Berkomunikasi dengan daemon (vmeerd) untuk isolasi storage.
- */
-bool requestNamespaceSetup(const char* pkgName, int vuid) {
+// Helper internal untuk daemon namespace
+static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) return false;
 
@@ -208,9 +172,26 @@ bool requestNamespaceSetup(const char* pkgName, int vuid) {
     return false;
 }
 
-/**
- * NEW JNI BRIDGE: sendDaemonCommand
- */
+// ====================================================================
+// EXTERN "C" LINKAGE: Khusus untuk JNI Eksport agar terbaca oleh Java
+// ====================================================================
+extern "C" {
+
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_isInitialized(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    return JNI_TRUE;
+}
+
+[[maybe_unused]] static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
+    void* stub = shadowhook_hook_sym_name(lib, sym, proxy, orig);
+    if (!stub) {
+        int err_num = shadowhook_get_errno();
+        LOGE("Hook Failed: %s:%s | %s", lib, sym, shadowhook_to_errmsg(err_num));
+    }
+    return stub;
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstring command_str) {
     (void)thiz;
@@ -248,9 +229,6 @@ Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstri
     return env->NewStringUTF("ERR_NO_RESP");
 }
 
-/**
- * NEW JNI BRIDGE: prepareStorageSandbox
- */
 JNIEXPORT jboolean JNICALL
 Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv *env, jclass clazz, jstring pkgName, jint vUid) {
     (void)clazz;
@@ -260,10 +238,6 @@ Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv *env, jclass clazz, j
     return result ? JNI_TRUE : JNI_FALSE;
 }
 
-/**
- * setupVM
- * DITAMBAHKAN PENGAMAN SUB-SYSTEM VIRTUAl MEMORY (UFFD AUTO-FALLBACK)
- */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
     (void)clazz;
@@ -273,21 +247,18 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     const char *path = env->GetStringUTFChars(mirrorPath, nullptr);
     
-    // 1. Ambil Konteks Runtime VM
     auto& vContext = vmeer::RuntimeContext::Get();
     vContext.SetVirtualUid(vUid);
     vContext.SetMirrorPath(path);
 
     requestNamespaceSetup("com.vmeer.guest", vUid);
 
-    // 2. Kunci Alokasi Memori File ROM untuk Mencegah Hambatan Kernel Android 15
     int rom_fd = open(path, O_RDONLY);
     if (rom_fd >= 0) {
         struct stat st;
         if (fstat(rom_fd, &st) == 0) {
             size_t rom_size = st.st_size;
             
-            // Sediakan ruang kosong bervolume PROT_NONE agar memicu alokasi halaman asinkron
             void* vma_addr = mmap(nullptr, rom_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             if (vma_addr != MAP_FAILED) {
                 
@@ -343,7 +314,6 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
         LOGE("vMeer_Engine: Gagal membuka file ROM untuk inisialisasi proteksi kernel: %s", strerror(errno));
     }
 
-    // 3. Eksekusi Jembatan Injeksi Framework ART Java Bawaan
     init_art_hook(env);
     
     jclass context_clazz = env->GetObjectClass(context);
@@ -358,9 +328,6 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
 }
 
-/**
- * JNI_OnLoad
- */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
     JNIEnv* env;
