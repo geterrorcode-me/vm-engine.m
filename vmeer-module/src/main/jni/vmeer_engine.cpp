@@ -17,6 +17,10 @@
 #include <sys/stat.h>
 #include <sys/prctl.h>
 
+// --- Android NDK Graphics ---
+#include <android/native_window.h>      // WAJIB: Untuk memproses Surface grafis Android
+#include <android/native_window_jni.h>  // WAJIB: Jembatan Surface -> ANativeWindow
+
 // --- Core Engine & Stealth ---
 #include "shadowhook.h"
 #include "vmeer_stealth.h"
@@ -43,6 +47,9 @@ typedef int32_t binder_status_t;
 // Pointer fungsi asli dari libc dan libbinder_ndk
 static int (*orig_prctl)(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5) = nullptr;
 static binder_status_t (*orig_AIBinder_transact)(AIBinder* binder, transaction_code_t code, const AParcel* in, AParcel* out, binder_flags_t flags) = nullptr;
+
+// Pointer global penampung layar virtual Guest OS
+static ANativeWindow* g_NativeWindow = nullptr;
 
 extern "C" {
 void init_art_hook(JNIEnv* env);
@@ -72,7 +79,7 @@ static binder_status_t proxy_AIBinder_transact(AIBinder* binder, transaction_cod
     return orig_AIBinder_transact(binder, code, in, out, flags);
 }
 
-// Helper internal IPC Daemon
+// Helper internal IPC Daemon (Sekarang dinamis menerima nama package)
 static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) return false;
@@ -102,6 +109,32 @@ static bool requestNamespaceSetup(const char* pkgName, int vuid) {
 
 extern "C" {
 
+/**
+ * JNI BARU: prepareStorageSandbox
+ * Mengamankan isolasi folder penyimpanan Virtual File System (VFS)
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv* env, jclass clazz, jstring pkgName, jint vUid) {
+    (void)clazz;
+    const char *pkg = env->GetStringUTFChars(pkgName, nullptr);
+    LOGI("vMeer_Engine: Mempersiapkan Sandbox VFS untuk paket: %s (vUID: %d)", pkg, vUid);
+    
+    // Set parameter dinamis ke RuntimeContext agar dibaca oleh VFS Redirector
+    auto& vContext = vmeer::RuntimeContext::Get();
+    vContext.SetTargetPackage(pkg);
+    vContext.SetVirtualUid(vUid);
+
+    // Kirim sinyal ke daemon lokal untuk setup ruang namespace
+    bool daemon_status = requestNamespaceSetup(pkg, vUid);
+    
+    env->ReleaseStringUTFChars(pkgName, pkg);
+    return daemon_status ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * JNI UPDATE: setupVM
+ * Memetakan ROM SquashFS via Zero-Copy dan mengaktifkan pengelabuan Seccomp Mode 2
+ */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
     (void)clazz;
@@ -114,8 +147,6 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     auto& vContext = vmeer::RuntimeContext::Get();
     vContext.SetVirtualUid(vUid);
     vContext.SetMirrorPath(path);
-
-    requestNamespaceSetup("com.vmeer.guest", vUid);
 
     // --- 1. DIRECT STORAGE MEMORY MAP ---
     int rom_fd = open(path, O_RDONLY);
@@ -163,6 +194,48 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
 }
 
+/**
+ * JNI BARU: setSurfaceBridge
+ * Mencegat dan mengunci objek Surface dari UI Java Host ke GPU Native
+ */
+JNIEXPORT void JNICALL
+Java_com_vmeer_io_VMeerEngine_setSurfaceBridge(JNIEnv* env, jclass clazz, jobject surface) {
+    (void)clazz;
+    // Jika ada surface lama yang terkunci, lepaskan dari memori
+    if (g_NativeWindow != nullptr) {
+        ANativeWindow_release(g_NativeWindow);
+        g_NativeWindow = nullptr;
+        LOGW("vMeer_Graphics: Jembatan grafik lama dilepas.");
+    }
+
+    if (surface != nullptr) {
+        // Konversi jobject Surface Android menjadi struktur native ANativeWindow C++
+        g_NativeWindow = ANativeWindow_fromSurface(env, surface);
+        if (g_NativeWindow != nullptr) {
+            LOGI("vMeer_Graphics: SUCCESS - Jembatan ANativeWindow berhasil dikunci ke memori GPU!");
+        } else {
+            LOGE("vMeer_Graphics: Gagal mengonversi objek Surface ke Native Window!");
+        }
+    }
+}
+
+/**
+ * JNI BARU: notifySurfaceChanged
+ * Mengatur ulang resolusi dimensi kanvas rendering internal
+ */
+JNIEXPORT void JNICALL
+Java_com_vmeer_io_VMeerEngine_notifySurfaceChanged(JNIEnv* env, jclass clazz, jint width, jint height) {
+    (void)clazz;
+    if (g_NativeWindow != nullptr) {
+        // Atur ukuran buffer internal sesuai dimensi layar dashboard Host
+        ANativeWindow_setBuffersGeometry(g_NativeWindow, width, height, WINDOW_FORMAT_RGBA_8888);
+        LOGI("vMeer_Graphics: Geometri buffer disesuaikan ke resolusi virtual: %dx%d", width, height);
+    }
+}
+
+/**
+ * Fungsi Siklus Awal Saat Library .so Pertama Kali Dimuat oleh System.loadLibrary()
+ */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
     JNIEnv* env;
@@ -172,7 +245,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     init_vmeer_stealth();
     shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
 
-    // PENTING: Jangan taruh fungsi hook lama berbasis ELF IPCThreadState di sini lagi!
+    // Hubungkan dengan shared state dan aktifkan Virtual File System (VFS)
     vmeer::helper::ConnectSharedState();
     vmeer::vfs::StartVFSEngine();
 
