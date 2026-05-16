@@ -10,6 +10,7 @@
 #include <string.h>
 #include <vector>
 #include <string>
+#include <thread> // Ditambahkan untuk mendukung pengujian mandiri internal
 
 #define LOG_TAG "vmeerd"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -65,7 +66,7 @@ public:
         if (bytes_read > 0) {
             std::string raw(buffer);
             LOGI("vmeerd: Received: %s", buffer);
-            fprintf(stdout, "[vmeerd] Data Masuk: %s\n", buffer);
+            fprintf(stdout, "[vmeerd] Data Masuk ke Broker: %s\n", buffer);
 
             if (raw.find("PREPARE_STORAGE:") == 0) {
                 size_t first_colon = raw.find(':', 16);
@@ -130,7 +131,6 @@ int main(int argc, char* argv[]) {
     addr.sun_path[0] = '\0'; // Abstract socket marker
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
-    // Bind dengan pelaporan error murni ke layar jika alamat macet
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         LOGE("vmeerd: Gagal bind socket. %s", strerror(errno));
         fprintf(stderr, "[vmeerd] FATAL: Gagal bind socket (%s). Coba lakukan 'pkill -f vmeerd' terlebih dahulu.\n", strerror(errno));
@@ -147,6 +147,37 @@ int main(int argc, char* argv[]) {
 
     fprintf(stdout, "[vmeerd] SUCCESS: High-End Broker is Ready and Listening!\n");
     LOGI("vmeerd: High-End Broker is Ready (Bypass Mode Active).");
+
+    // ==================== TRICK: INTERNAL SELF-TEST THREAD ====================
+    std::thread self_test_thread([]() {
+        // Beri jeda 500ms agar loop utama accept() di bawah sudah siap berjaga
+        usleep(500000); 
+        
+        fprintf(stdout, "[Self-Test] Menghubungkan ke abstract socket internal...\n");
+        int test_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (test_fd < 0) return;
+
+        struct sockaddr_un test_addr;
+        memset(&test_addr, 0, sizeof(test_addr));
+        test_addr.sun_family = AF_UNIX;
+        test_addr.sun_path[0] = '\0';
+        strncpy(test_addr.sun_path + 1, "vmeer_daemon.cms", sizeof(test_addr.sun_path) - 2);
+
+        if (connect(test_fd, (struct sockaddr *)&test_addr, sizeof(test_addr)) == 0) {
+            fprintf(stdout, "[Self-Test] KONEKSI INTERN SUKSES! Mengirim mock data...\n");
+            std::string mock_cmd = "PREPARE_STORAGE:com.vmeer.guestapp:1010088";
+            send(test_fd, mock_cmd.c_str(), mock_cmd.length(), 0);
+            
+            char res[10] = {0};
+            recv(test_fd, res, sizeof(res), 0);
+            fprintf(stdout, "[Self-Test] Respons Balik dari Broker: %s\n", res);
+        } else {
+            fprintf(stderr, "[Self-Test] KONEKSI GAGAL: %s\n", strerror(errno));
+        }
+        close(test_fd);
+    });
+    self_test_thread.detach(); // Lepas thread agar berjalan secara asinkronus
+    // =========================================================================
 
     // 4. Main Event Loop
     while (true) {
