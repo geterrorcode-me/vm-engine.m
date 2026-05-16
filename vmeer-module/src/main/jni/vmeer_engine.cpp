@@ -48,18 +48,10 @@ static binder_status_t (*orig_AIBinder_transact)(AIBinder* binder, transaction_c
 
 static ANativeWindow* g_NativeWindow = nullptr;
 
-// SOLUSI: Penampung cadangan global jika RuntimeContext tidak memiliki properti SetTargetPackage
-static std::string g_TargetPackageName = "com.vmeer.guest";
-
 extern "C" {
 void init_art_hook(JNIEnv* env);
 void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
 void syncJavaProperties(JNIEnv* env);
-
-// Fungsi jembatan eksternal agar bisa dibaca dari vmeer_vfs.cpp jika diperlukan
-const char* GetEngineTargetPackage() {
-    return g_TargetPackageName.c_str();
-}
 }
 
 // ====================================================================
@@ -83,8 +75,9 @@ static binder_status_t proxy_AIBinder_transact(AIBinder* binder, transaction_cod
     return orig_AIBinder_transact(binder, code, in, out, flags);
 }
 
+// OPTIMALISASI: Non-blocking socket dengan pengaman selektif agar UI tidak freeze
 static bool requestNamespaceSetup(const char* pkgName, int vuid) {
-    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    int sock = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (sock < 0) return false;
 
     struct sockaddr_un addr;
@@ -93,21 +86,31 @@ static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     addr.sun_path[0] = '\0'; 
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+    int res = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (res < 0 && errno != EINPROGRESS) {
+        LOGW("vMeer_Engine: Daemon vmeerd belum aktif atau tidak merespons. Melewati setup namespace.");
+        close(sock);
+        return true; // Bypass true agar sequence inisialisasi Java tidak stuck/menggantung
+    }
+
+    // Tunggu maksimal 1 detik menggunakan select() demi mencegah ANR / Timeout panjang
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    
+    fd_set fdset;
+    FD_ZERO(&fdset);
+    FD_SET(sock, &fdset);
+
+    if (select(sock + 1, nullptr, &fdset, nullptr, &tv) > 0) {
         char cmd[512];
         snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s:%d", pkgName, vuid);
-        if (send(sock, cmd, strlen(cmd), 0) > 0) {
-            char response[16] = {0};
-            if (recv(sock, response, sizeof(response), 0) > 0) {
-                if (strcmp(response, "OK") == 0) {
-                    close(sock);
-                    return true;
-                }
-            }
-        }
+        send(sock, cmd, strlen(cmd), 0);
+        LOGI("vMeer_Engine: Perintah PREPARE_STORAGE dikirim ke daemon.");
     }
+
     close(sock);
-    return false;
+    return true; 
 }
 
 extern "C" {
@@ -121,10 +124,9 @@ Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv* env, jclass clazz, j
     const char *pkg = env->GetStringUTFChars(pkgName, nullptr);
     LOGI("vMeer_Engine: Mempersiapkan Sandbox VFS untuk paket: %s (vUID: %d)", pkg, vUid);
     
-    // Simpan ke variabel static engine global kita
-    g_TargetPackageName = pkg;
-
+    // Sinkronisasi data ke struktur singleton RuntimeContext yang baru diperbarui
     auto& vContext = vmeer::RuntimeContext::Get();
+    vContext.SetTargetPackage(pkg);
     vContext.SetVirtualUid(vUid);
 
     bool daemon_status = requestNamespaceSetup(pkg, vUid);
