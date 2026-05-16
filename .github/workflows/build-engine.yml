@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-engine:
-    # Menggunakan runner native ARM64 untuk mempercepat & menstabilkan build NDK/CMake
+    # PERBAIKAN: Menggunakan label runner ARM64 resmi yang didukung GitHub
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -21,18 +21,25 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Mengonfigurasi Android SDK & NDK yang kompatibel dengan Linux ARM64
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # Mengonfigurasi variabel jalur Android SDK bawaan dari lingkungan Runner ARM
+      - name: Configure Android SDK Path
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk-bundle" >> $GITHUB_ENV
+
+      # Membuat file local.properties dinamis agar Gradle mengenali SDK host ARM
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Menjalankan proses kompilasi untuk modul engine
+      # Eksekusi kompilasi modul engine murni secara native (aarch64 ke aarch64)
       - name: Compile vMeer Engine Module
         run: ./gradlew :vmeer-module:assembleRelease
 
-      # Upload file .AAR untuk kebutuhan integrasi Java/Kotlin
+      # Upload file .AAR untuk kebutuhan integrasi Java/Kotlin di AndroidIDE
       - name: Upload AAR Artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -40,13 +47,12 @@ jobs:
           name: vmeer-engine-modular
           path: vmeer-module/build/outputs/aar/vmeer-module-release.aar
 
-      # PERBAIKAN FINAL: Upload Binary Native (vmeerd & libvmeer_engine.so)
+      # Upload Binary Native (vmeerd & libvmeer_engine.so) hasil kompilasi ARM murni
       - name: Upload Native Binaries (vmeerd & libvmeer)
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vmeer-native-binaries-arm64
-          # Menggunakan tanda bintang (*) untuk melewati hash acak buatan CMake/Ninja
           path: |
             vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/vmeerd
             vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/libvmeer_engine.so
