@@ -20,30 +20,30 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # PERBAIKAN 1: Tembak langsung path absolut Android SDK bawaan Ubuntu Runner
+      # PERBAIKAN 1: Buat & arahkan Android SDK ke dalam folder internal workspace ($GITHUB_WORKSPACE)
       - name: Configure Android SDK Path
         run: |
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
+          mkdir -p "$GITHUB_WORKSPACE/android-sdk/licenses"
+          echo "ANDROID_HOME=$GITHUB_WORKSPACE/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-sdk/ndk-bundle" >> $GITHUB_ENV
 
-      # PERBAIKAN 2: Tulis sdk.dir secara absolut di local.properties
+      # PERBAIKAN 2: Set nilai absolut workspace ke local.properties agar Gradle patuh
       - name: Create local.properties
         run: |
-          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          echo "sdk.dir=$GITHUB_WORKSPACE/android-sdk" > local.properties
 
-      # PERBAIKAN 3: Suntik lisensi langsung ke path absolut SDK yang valid
+      # PERBAIKAN 3: Menyuntikkan lisensi ke dalam folder workspace yang sudah pasti diizinkan
       - name: Accept Android SDK & NDK Licenses
         run: |
-          mkdir -p "/usr/local/lib/android/sdk/licenses"
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "/usr/local/lib/android/sdk/licenses/android-sdk-license"
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "/usr/local/lib/android/sdk/licenses/android-sdk-preview-license"
-          echo "d56f173417b0b47a87c53304cd24005941833e70" > "/usr/local/lib/android/sdk/licenses/android-googletv-license"
-          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "/usr/local/lib/android/sdk/licenses/android-sdk-arm-dbt-license"
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-preview-license"
+          echo "d56f173417b0b47a87c53304cd24005941833e70" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-googletv-license"
+          echo "65b0344c5a6650d113e74c2e44a51559134f71e9" > "$GITHUB_WORKSPACE/android-sdk/licenses/android-sdk-arm-dbt-license"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Mulai kompilasi biner native
+      # Eksekusi kompilasi biner native
       - name: Compile vMeer Engine Module
         run: ./gradlew :vmeer-module:assembleRelease
 
