@@ -5,16 +5,31 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 6797,
-          "line": 218
+          "index": 7149,
+          "line": 224
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 7149,
+          "line": 224
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/surface_vm.cpp",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2409,
+          "line": 66
+        },
+        "start": {
+          "column": 0,
+          "index": 2409,
+          "line": 66
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/surface_vm.cpp"
 }

@@ -8,6 +8,8 @@
 
 #define LOG_TAG "vMeer_Graphics"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // Definisi pointer fungsi asli
 typedef int (*p_dequeue_buffer_t)(void* base, ANativeWindow_Buffer** buffer, int* fenceFd);
@@ -19,7 +21,7 @@ static int proxy_dequeue_buffer(void* base, ANativeWindow_Buffer** buffer, int* 
         // Panggil fungsi asli
         int result = orig_dequeue(base, buffer, fenceFd);
         
-        // Logika monitoring frame bisa ditaruh di sini
+        // Logika monitoring frame bisa ditaruh di sini jika diperlukan
         // LOGI("vMeer: DequeueBuffer Intercepted");
         
         return result;
@@ -31,23 +33,34 @@ static int proxy_dequeue_buffer(void* base, ANativeWindow_Buffer** buffer, int* 
 void start_graphics_proxy() {
     LOGI("vMeer: Initializing Graphics Hook...");
     
-    if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
-        return;
+    // PERUBAHAN UTAMA: Ubah ke SHADOWHOOK_MODE_SHARED agar selaras dengan core engine
+    int sh_status = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+    
+    if (sh_status != 0) {
+        // JANGAN LANGSUNG RETURN! Jika error code adalah tanda sudah di-init di tempat lain, 
+        // kita harus tetap melanjutkan proses hooking ke libgui.so.
+        LOGW("vMeer_Graphics: ShadowHook init returned %d (Mungkin sudah diaktifkan oleh vmeer_engine.cpp)", sh_status);
     }
 
     // Hook dequeueBuffer di libgui.so
     // Gunakan fungsi proxy_dequeue_buffer yang sudah didefinisikan di atas
-    shadowhook_hook_sym_name(
+    void* stub = shadowhook_hook_sym_name(
         "libgui.so",
         "_ZN7android7Surface13dequeueBufferEPP19ANativeWindowBufferPi",
         (void*)proxy_dequeue_buffer,
         (void**)&orig_dequeue
     );
     
-    LOGI("vMeer: Graphics Hook Matched (100%%)");
+    if (stub) {
+        LOGI("vMeer: Graphics Hook Matched (100%%)");
+    } else {
+        int err_num = shadowhook_get_errno();
+        LOGE("vMeer: Graphics Hook FAILED to match libgui symbol! Error: %s", shadowhook_to_errmsg(err_num));
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL 
 Java_com_vmeer_io_GraphicsEngine_nativeInit(JNIEnv* env, jobject thiz) {
+    (void)env; (void)thiz;
     start_graphics_proxy();
 }
