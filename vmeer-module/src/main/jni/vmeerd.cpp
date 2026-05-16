@@ -19,14 +19,12 @@
 class StorageSandbox {
 public:
     static bool initializeIsolation() {
-        // PERBAIKAN 1: Jangan matikan program jika unshare gagal di Termux/PRoot
         if (unshare(CLONE_NEWNS) != 0) {
             LOGW("vmeerd: Gagal unshare namespace (%s). Mengaktifkan mode Userspace VFS / PRoot Bypass.", strerror(errno));
-            // Kita kembalikan true agar eksekusi tetap berlanjut menggunakan virtualisasi PRoot
+            fprintf(stderr, "[vmeerd] WARN: Gagal unshare namespace (%s). Menggunakan PRoot Bypass mode.\n", strerror(errno));
             return true; 
         }
         
-        // Hanya lakukan mount private jika unshare berhasil
         if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) != 0) {
             LOGW("vmeerd: Mount MS_PRIVATE dilewati karena batasan kernel.");
         }
@@ -39,24 +37,19 @@ public:
         
         int user_id = vuid / 100000;
 
-        // Struktur folder sandbox yang sinkron dengan vmeer_vfs.cpp
         sprintf(virtualPath, "/data/data/com.vmeer.manager/virtual/user_%d/%s/data", user_id, pkgName);
         sprintf(targetPath, "/data/data/%s", pkgName);
 
-        // 1. Pastikan folder virtual ada
         mkdir(virtualPath, 0755);
 
-        // 2. Fix Permission: Abaikan jika chown gagal karena keterbatasan non-root asli
         if (chown(virtualPath, vuid, vuid) != 0) {
             LOGW("vmeerd: chown gagal (%s), mengandalkan izin internal PRoot.", strerror(errno));
         }
 
-        // 3. Bind Mount virtual
         if (mount(virtualPath, targetPath, NULL, MS_BIND | MS_REC, NULL) == 0) {
             LOGI("vmeerd: Sandbox Storage Linked: %s -> %s (UID: %d)", virtualPath, targetPath, vuid);
             return true;
         } else {
-            // Di PRoot, jika mount murni gagal, kita simulasikan sukses karena PRoot menghandle binding via bender flag (-b)
             LOGW("vmeerd: Kernel Mount failed (%s). Mengandalkan fallback redirection PRoot.", strerror(errno));
             return true; 
         }
@@ -72,8 +65,8 @@ public:
         if (bytes_read > 0) {
             std::string raw(buffer);
             LOGI("vmeerd: Received: %s", buffer);
+            fprintf(stdout, "[vmeerd] Data Masuk: %s\n", buffer);
 
-            // Parsing: PREPARE_STORAGE:pkg_name:vuid
             if (raw.find("PREPARE_STORAGE:") == 0) {
                 size_t first_colon = raw.find(':', 16);
                 if (first_colon != std::string::npos) {
@@ -92,44 +85,70 @@ public:
     }
 };
 
-int main() {
-    // PERBAIKAN 2: Longgarkan pengecekan UID khusus untuk kompatibilitas Termux/PRoot
-    if (getuid() != 0) {
-        LOGW("vmeerd: Berjalan di lingkungan Non-Root murni/PRoot. Melanjutkan dengan pembatasan userspace.");
+int main(int argc, char* argv[]) {
+    std::string image_path = "";
+    std::string target_path = "";
+
+    // 1. Argument Parser Adaptif
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg.find("--image=") == 0) {
+            image_path = arg.substr(8);
+        } else if (arg.find("--target=") == 0) {
+            target_path = arg.substr(9);
+        }
     }
 
-    // Jalankan inisialisasi bypass
+    fprintf(stdout, "[vmeerd] Memulai Daemon...\n");
+    if (!image_path.empty() && !target_path.empty()) {
+        fprintf(stdout, "[vmeerd] Konfigurasi VFS: Image=%s, Target=%s\n", image_path.c_str(), target_path.c_str());
+    }
+
+    if (getuid() != 0) {
+        LOGW("vmeerd: Berjalan di lingkungan Non-Root murni/PRoot.");
+        fprintf(stdout, "[vmeerd] Info: Berjalan di lingkungan Userspace PRoot.\n");
+    }
+
+    // 2. Jalankan Inisialisasi Isolasi
     if (!StorageSandbox::initializeIsolation()) {
         LOGE("vmeerd: Gagal menginisialisasi isolasi dasar.");
+        fprintf(stderr, "[vmeerd] FATAL: Gagal menginisialisasi isolasi dasar.\n");
         return 1;
     }
 
+    // 3. Setup Abstract Unix Socket IPC
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_fd < 0) {
         LOGE("vmeerd: Gagal membuat socket.");
+        fprintf(stderr, "[vmeerd] FATAL: Gagal membuat socket: %s\n", strerror(errno));
         return 1;
     }
 
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0'; // Abstract socket namespace
+    addr.sun_path[0] = '\0'; // Abstract socket marker
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
+    // Bind dengan pelaporan error murni ke layar jika alamat macet
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         LOGE("vmeerd: Gagal bind socket. %s", strerror(errno));
+        fprintf(stderr, "[vmeerd] FATAL: Gagal bind socket (%s). Coba lakukan 'pkill -f vmeerd' terlebih dahulu.\n", strerror(errno));
         close(server_fd);
         return 1;
     }
     
     if (listen(server_fd, 10) < 0) {
         LOGE("vmeerd: Gagal listen socket.");
+        fprintf(stderr, "[vmeerd] FATAL: Gagal melakukan listen pada socket.\n");
         close(server_fd);
         return 1;
     }
 
+    fprintf(stdout, "[vmeerd] SUCCESS: High-End Broker is Ready and Listening!\n");
     LOGI("vmeerd: High-End Broker is Ready (Bypass Mode Active).");
 
+    // 4. Main Event Loop
     while (true) {
         int client_sock = accept(server_fd, NULL, NULL);
         if (client_sock >= 0) {
