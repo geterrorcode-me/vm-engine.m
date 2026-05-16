@@ -12,12 +12,9 @@
 // --- System & Memory Handling ---
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <linux/userfaultfd.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <errno.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 
 // --- Core Engine & Stealth ---
 #include "shadowhook.h"
@@ -45,121 +42,10 @@
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// ====================================================================
-// NDK COMPATIBILITY LAYER: Hardcoded ioctl untuk NDK jadul (Bypass UFFD_IOC_MAGIC)
-// ====================================================================
-#ifndef UFFDIO_MOVE
-#define UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES ((__u64)1<<0)
-
-struct uffdio_move {
-    __u64 dst;
-    __u64 src;
-    __u64 len;
-    __u64 mode;
-    __s64 move;
-};
-
-// Nilai hex evaluasi dari _IOWR(0xAA, 0x05, struct uffdio_move)
-#define UFFDIO_MOVE 0xC028AA05
-#endif
-// ====================================================================
-
-// --- Fungsi eksternal dari modul lain ---
-extern "C" void init_art_hook(JNIEnv* env);
-extern "C" void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
-extern "C" void syncJavaProperties(JNIEnv* env);
-
-// Struktur data untuk melemparkan konteks ke thread fault handler
-struct FaultHandlerArgs {
-    int uffd_fd;
-    uintptr_t uffd_vma_start;
-    size_t uffd_vma_len;
-    int rom_fd;
-};
-
-// ====================================================================
-// INTERNAL HANDLER (C++ Linkage)
-// ====================================================================
-static void* UserfaultfdHandlerThread(void* arg) {
-    auto* args = static_cast<FaultHandlerArgs*>(arg);
-    int uffd = args->uffd_fd;
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    
-    auto* page_buffer = static_cast<char*>(mmap(nullptr, page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-    if (page_buffer == MAP_FAILED) {
-        LOGE("vMeer_UFFD: FATAL - Gagal mengalokasikan page_buffer di user space!");
-        close(args->rom_fd);
-        delete args;
-        return nullptr;
-    }
-
-    LOGI("vMeer_Engine: Thread alokasi UFFD subsistem memory manager siap.");
-
-    while (true) {
-        struct uffd_msg msg;
-        ssize_t nread = read(uffd, &msg, sizeof(msg));
-        
-        if (nread == 0) {
-            LOGI("vMeer_UFFD: Koneksi monitor userfaultfd diputus sistem.");
-            break;
-        }
-        if (nread == -1) {
-            if (errno == EAGAIN) continue;
-            LOGE("vMeer_UFFD: Error pembacaan pesan descriptor: %s", strerror(errno));
-            break;
-        }
-
-        if (msg.event == UFFD_EVENT_PAGEFAULT) {
-            uintptr_t fault_address = msg.arg.pagefault.address;
-            uintptr_t fault_page_aligned = fault_address & ~(page_size - 1);
-            
-            off_t file_offset = fault_page_aligned - args->uffd_vma_start;
-
-            memset(page_buffer, 0, page_size);
-            if (pread(args->rom_fd, page_buffer, page_size, file_offset) < 0) {
-                LOGE("vMeer_UFFD: Gagal membaca partisi ROM pada offset %lld", (long long)file_offset);
-            }
-
-            // [LAPIS 1]: UFFDIO_MOVE
-            struct uffdio_move uffdio_move_args;
-            uffdio_move_args.dst = fault_page_aligned;
-            uffdio_move_args.src = reinterpret_cast<uintptr_t>(page_buffer);
-            uffdio_move_args.len = page_size;
-            uffdio_move_args.mode = UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES;
-
-            if (ioctl(uffd, UFFDIO_MOVE, &uffdio_move_args) == -1) {
-                LOGW("vMeer_UFFD: UFFDIO_MOVE ditolak kernel Android 15 (%s). Mencoba Lapis 2...", strerror(errno));
-
-                // [LAPIS 2]: UFFDIO_COPY
-                struct uffdio_copy uffdio_copy_args;
-                uffdio_copy_args.dst = fault_page_aligned;
-                uffdio_copy_args.src = reinterpret_cast<uintptr_t>(page_buffer);
-                uffdio_copy_args.len = page_size;
-                uffdio_copy_args.mode = 0;
-
-                if (ioctl(uffd, UFFDIO_COPY, &uffdio_copy_args) == -1) {
-                    LOGE("vMeer_UFFD: UFFDIO_COPY diblokir kernel/SELinux (%s)!", strerror(errno));
-                    LOGW("vMeer_UFFD: Mengaktifkan EMERGENCY FALLBACK Lapis 3 (User-space Memcpy)...");
-
-                    // [LAPIS 3]: Manual Memcpy + Forced Wake
-                    mprotect(reinterpret_cast<void*>(fault_page_aligned), page_size, PROT_READ | PROT_WRITE);
-                    memcpy(reinterpret_cast<void*>(fault_page_aligned), page_buffer, page_size);
-                    
-                    struct uffdio_range uffdio_wake_args;
-                    uffdio_wake_args.start = fault_page_aligned;
-                    uffdio_wake_args.len = page_size;
-                    ioctl(uffd, UFFDIO_WAKE, &uffdio_wake_args);
-                } else {
-                    LOGI("vMeer_UFFD: Lapis 2 SUKSES - Memori disuntik via UFFDIO_COPY.");
-                }
-            }
-        }
-    }
-
-    munmap(page_buffer, page_size);
-    close(args->rom_fd);
-    delete args;
-    return nullptr;
+extern "C" {
+void init_art_hook(JNIEnv* env);
+void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
+void syncJavaProperties(JNIEnv* env);
 }
 
 // Helper internal untuk daemon namespace
@@ -191,9 +77,6 @@ static bool requestNamespaceSetup(const char* pkgName, int vuid) {
     return false;
 }
 
-// ====================================================================
-// EXTERN "C" LINKAGE: Khusus untuk JNI Eksport agar terbaca oleh Java
-// ====================================================================
 extern "C" {
 
 JNIEXPORT jboolean JNICALL
@@ -257,6 +140,9 @@ Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv *env, jclass clazz, j
     return result ? JNI_TRUE : JNI_FALSE;
 }
 
+/**
+ * setupVM: PENGAMANAN BARU - DIRECT MEMORY MAPPING (HIGH COMPATIBILITY)
+ */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
     (void)clazz;
@@ -272,67 +158,28 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     requestNamespaceSetup("com.vmeer.guest", vUid);
 
+    // Buka file ROM secara langsung
     int rom_fd = open(path, O_RDONLY);
     if (rom_fd >= 0) {
         struct stat st;
         if (fstat(rom_fd, &st) == 0) {
             size_t rom_size = st.st_size;
             
-            void* vma_addr = mmap(nullptr, rom_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            // Lakukan Direct Memory Mapping dari berkas ROM SquashFS secara sinkron.
+            // Ini memotong birokrasi userfaultfd yang diblokir oleh Android 15 HyperOS.
+            void* vma_addr = mmap(nullptr, rom_size, PROT_READ, MAP_PRIVATE, rom_fd, 0);
             if (vma_addr != MAP_FAILED) {
-                
-                int uffd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
-                if (uffd == -1) {
-                    LOGW("vMeer_Engine: Kernel memblokir syscall UFFD. Mengalihkan ke Full Static Map...");
-                    mprotect(vma_addr, rom_size, PROT_READ | PROT_WRITE);
-                    mmap(vma_addr, rom_size, PROT_READ, MAP_PRIVATE | MAP_FIXED, rom_fd, 0);
-                    close(rom_fd);
-                } else {
-                    struct uffdio_api uffdio_api_args;
-                    uffdio_api_args.api = UFFD_API;
-                    uffdio_api_args.features = 0;
-                    
-                    if (ioctl(uffd, UFFDIO_API, &uffdio_api_args) != -1) {
-                        struct uffdio_register uffdio_register_args;
-                        uffdio_register_args.range.start = reinterpret_cast<uintptr_t>(vma_addr);
-                        uffdio_register_args.range.len = rom_size;
-                        uffdio_register_args.mode = UFFDIO_REGISTER_MODE_MISSING;
-                        
-                        if (ioctl(uffd, UFFDIO_REGISTER, &uffdio_register_args) != -1) {
-                            auto* thread_args = new FaultHandlerArgs();
-                            thread_args->uffd_fd = uffd;
-                            thread_args->uffd_vma_start = reinterpret_cast<uintptr_t>(vma_addr);
-                            thread_args->uffd_vma_len = rom_size;
-                            thread_args->rom_fd = rom_fd;
-
-                            pthread_t thr;
-                            if (pthread_create(&thr, nullptr, UserfaultfdHandlerThread, thread_args) == 0) {
-                                pthread_detach(thr);
-                                LOGI("vMeer_Engine: Virtual Memory Management Lapis 3 Sukses Terpasang.");
-                            } else {
-                                delete thread_args;
-                                close(uffd);
-                                close(rom_fd);
-                            }
-                        } else {
-                            close(uffd);
-                            close(rom_fd);
-                        }
-                    } else {
-                        close(uffd);
-                        close(rom_fd);
-                    }
-                }
+                LOGI("vMeer_Engine: ROM sukses dipetakan via Zero-Copy Static Map di alamat %p", vma_addr);
             } else {
-                close(rom_fd);
+                LOGE("vMeer_Engine: Gagal melakukan mmap ROM secara statis: %s", strerror(errno));
             }
-        } else {
-            close(rom_fd);
         }
+        close(rom_fd);
     } else {
-        LOGE("vMeer_Engine: Gagal membuka file ROM untuk inisialisasi proteksi kernel: %s", strerror(errno));
+        LOGE("vMeer_Engine: Gagal membuka berkas ROM SquashFS: %s", strerror(errno));
     }
 
+    // Eksekusi core ART Java Bridge bawaanmu
     init_art_hook(env);
     
     jclass context_clazz = env->GetObjectClass(context);
