@@ -46,7 +46,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // ====================================================================
-// NDK COMPATIBILITY LAYER: Definisi manual jika NDK Actions pakai header jadul
+// NDK COMPATIBILITY LAYER: Hardcoded ioctl untuk NDK jadul (Bypass UFFD_IOC_MAGIC)
 // ====================================================================
 #ifndef UFFDIO_MOVE
 #define UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES ((__u64)1<<0)
@@ -59,11 +59,8 @@ struct uffdio_move {
     __s64 move;
 };
 
-#define UFFDIO_MOVE _IOWR(UFFD_IOC_MAGIC, _UFFDIO_MOVE, struct uffdio_move)
-#endif
-
-#ifndef _UFFDIO_MOVE
-#define _UFFDIO_MOVE (0x05)
+// Nilai hex evaluasi dari _IOWR(0xAA, 0x05, struct uffdio_move)
+#define UFFDIO_MOVE 0xC028AA05
 #endif
 // ====================================================================
 
