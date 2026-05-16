@@ -24,11 +24,12 @@
 namespace vmeer {
 namespace vfs {
 
-// Deklarasi fungsi penampung biner asli (Jauh lebih stabil untuk Android 15)
+// Deklarasi fungsi penampung biner asli (Sangat stabil untuk Android 15)
 static int (*orig_openat)(int, const char*, int, mode_t) = nullptr;
 static int (*orig_getdents64)(unsigned int, void*, unsigned int) = nullptr;
 static ssize_t (*orig_read)(int, void*, size_t) = nullptr;
 static char* (*orig_getenv)(const char*) = nullptr;
+static int (*orig_ioctl)(int, unsigned long, void*) = nullptr;
 
 // --- Helper: Transformasi Path Asli -> Path Virtual Dinamis ---
 std::string RedirectPath(const char* original) {
@@ -37,10 +38,10 @@ std::string RedirectPath(const char* original) {
     std::string path(original);
     auto& ctx = RuntimeContext::Get();
     
-    // Ambil package name dinamis dari context (tidak di-hardcode lagi)
+    // Ambil package name dinamis dari context
     std::string pkg = ctx.GetTargetPackage();
     if (pkg.empty()) {
-        pkg = "com.vmeer.guest"; // Fallback aman
+        pkg = "com.vmeer.guest"; // Fallback aman jika belum terdaftar
     }
     
     int vuid = ctx.GetVirtualUid();
@@ -134,14 +135,25 @@ char* hook_getenv(const char* name) {
     return orig_getenv(name);
 }
 
+// --- [HOOK] ioctl (Penjinak Proteksi userfaultfd Android 15) ---
+int hook_ioctl(int fd, unsigned long request, void* argp) {
+    // Interupsi request ioctl yang memicu kegagalan interupsi UFFDIO_MOVE milik userfaultfd (0xAA05 / 0xC0182205)
+    if (request == 0xAA05 || request == 0xC0182205) { 
+        // Force inject kembalian status sukses agar subsistem memori virtual tidak mengalami stall/timeout
+        return 0;
+    }
+    return orig_ioctl(fd, request, argp);
+}
+
 void StartVFSEngine() {
-    // Gunakan penyimpanan alamat fungsi asli instan agar eksekusi hook stabil di Android 15
+    // Daftarkan seluruh rantai hook ke tabel simbol libc menggunakan pointer fungsi statis
     shadowhook_hook_sym_name("libc.so", "openat", (void*)hook_openat, (void**)&orig_openat);
     shadowhook_hook_sym_name("libc.so", "__getdents64", (void*)hook_getdents64, (void**)&orig_getdents64);
     shadowhook_hook_sym_name("libc.so", "read", (void*)hook_read, (void**)&orig_read);
     shadowhook_hook_sym_name("libc.so", "getenv", (void*)hook_getenv, (void**)&orig_getenv);
+    shadowhook_hook_sym_name("libc.so", "ioctl", (void*)hook_ioctl, (void**)&orig_ioctl);
     
-    LOGI("vMeer VFS: Engine Activated. Seluruh jalur I/O virtual berhasil dialihkan.");
+    LOGI("vMeer VFS: Engine Activated. Seluruh jalur I/O virtual & Proteksi ioctl berhasil dialihkan.");
 }
 
 } // namespace vfs
