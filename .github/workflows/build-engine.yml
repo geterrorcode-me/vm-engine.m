@@ -40,13 +40,15 @@ jobs:
           name: vmeer-engine-modular
           path: vmeer-module/build/outputs/aar/vmeer-module-release.aar
 
-      # Upload Binary Native (vmeerd & libvmeer_engine.so)
-      - name: Upload Native Binaries (vmeerd & libvmeer)
+      # ====================================================================
+      # PERBAIKAN DI SINI: Menyapu bersih seluruh pusaka .so dan biner daemon
+      # ====================================================================
+      - name: Upload Native Binaries (vmeerd & Seluruh Benda Pusaka .so)
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vmeer-native-binaries-arm64
           path: |
             vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/vmeerd
-            vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/libvmeer_engine.so
+            vmeer-module/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/lib*.so
           if-no-files-found: error
