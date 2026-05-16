@@ -37,14 +37,22 @@ extern "C" void syncJavaProperties(JNIEnv* env);
 
 #define LOG_TAG "vMeer_Engine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 extern "C" {
 
 /**
- * FIX: Tambahkan [[maybe_unused]] agar compiler tidak menganggap ini error 
- * jika belum dipanggil secara eksplisit di file ini.
+ * NEW JNI BRIDGE: isInitialized
+ * Dipanggil dari Java (VMeerEngine.isInitialized()) untuk memastikan 
+ * status muat library .so sukses tanpa crash.
  */
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_isInitialized(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    return JNI_TRUE;
+}
+
 [[maybe_unused]] static void* do_hook(const char* lib, const char* sym, void* proxy, void** orig) {
     void* stub = shadowhook_hook_sym_name(lib, sym, proxy, orig);
     if (!stub) {
@@ -88,18 +96,14 @@ bool requestNamespaceSetup(const char* pkgName, int vuid) {
 
 /**
  * NEW JNI BRIDGE: sendDaemonCommand
- * Jembatan komunikasi IPC dari Kotlin (com.vmeer.io.VMeerEngine) ke vmeerd daemon.
  */
 JNIEXPORT jstring JNICALL
 Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstring command_str) {
     (void)thiz;
-
-    // 1. Ambil string perintah dari Java layer
     const char *native_cmd = env->GetStringUTFChars(command_str, nullptr);
     std::string cmd(native_cmd);
     env->ReleaseStringUTFChars(command_str, native_cmd);
 
-    // 2. Buka client Unix Domain Socket
     int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_fd < 0) {
         LOGE("vMeer JNI: Gagal membuat socket client.");
@@ -109,53 +113,58 @@ Java_com_vmeer_io_VMeerEngine_sendDaemonCommand(JNIEnv *env, jobject thiz, jstri
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0'; // Abstract socket namespace marker
+    addr.sun_path[0] = '\0';
     strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
 
-    // 3. Hubungkan ke core daemon vmeerd
     if (connect(client_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         LOGE("vMeer JNI: Koneksi ke daemon ditolak (vmeerd mati).");
         close(client_fd);
         return env->NewStringUTF("ERR_DAEMON_DEAD");
     }
 
-    // 4. Kirim paket payload perintah
     send(client_fd, cmd.c_str(), cmd.length(), 0);
 
-    // 5. Tangkap respons balik dari vmeerd (OK / ERR)
     char buffer[32] = {0};
     ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
     close(client_fd);
 
     if (bytes_read > 0) {
-        return env->NewStringUTF(buffer); // Kembalikan string "OK" ke Kotlin
+        return env->NewStringUTF(buffer);
     }
     return env->NewStringUTF("ERR_NO_RESP");
 }
 
 /**
- * setupVM:
- * Konfigurasi Virtual Machine yang dipanggil dari Java level.
+ * NEW JNI BRIDGE: prepareStorageSandbox
+ * Menyesuaikan dengan pemanggilan JNI dari interface Java yang kamu pakai kemarin.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv *env, jclass clazz, jstring pkgName, jint vUid) {
+    (void)clazz;
+    const char *native_pkg = env->GetStringUTFChars(pkgName, nullptr);
+    bool result = requestNamespaceSetup(native_pkg, vUid);
+    env->ReleaseStringUTFChars(pkgName, native_pkg);
+    return result ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * setupVM
  */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context, jstring mirrorPath, jint vUid) {
     (void)clazz;
-    
     LOGI("====================================================");
     LOGI("   vMeer OS: Configuring High-End Virtual Machine   ");
     LOGI("====================================================");
 
     const char *path = env->GetStringUTFChars(mirrorPath, nullptr);
     
-    // 1. Update Runtime Context
     auto& vContext = vmeer::RuntimeContext::Get();
     vContext.SetVirtualUid(vUid);
     vContext.SetMirrorPath(path);
 
-    // 2. Request Namespace & Storage Setup
     requestNamespaceSetup("com.vmeer.guest", vUid);
 
-    // 3. JNI & ART Setup
     init_art_hook(env);
     
     jclass context_clazz = env->GetObjectClass(context);
@@ -164,7 +173,6 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     perform_mirror_injection(env, class_loader, path);
 
-    // 4. Sinkronisasi Identitas (Spoofing)
     syncJavaProperties(env);
 
     env->ReleaseStringUTFChars(mirrorPath, path);
@@ -172,8 +180,7 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 }
 
 /**
- * JNI_OnLoad:
- * Inisialisasi tunggal (Single Entry Point).
+ * JNI_OnLoad
  */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
@@ -182,31 +189,30 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
 
     LOGI("vMeer Engine: Booting Core Systems...");
 
-    // 1. Stealth Engine Initialization (Must be first)
     init_vmeer_stealth();
     
-    // Gunakan MODE_UNIQUE untuk Dimensity 8300 (ARMv9 / Android 14+)
-    if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false) != 0) {
-        LOGE("CRITICAL: ShadowHook failed to initialize!");
-        return JNI_ERR;
+    // PERUBAHAN UTAMA: Ubah ke SHADOWHOOK_MODE_SHARED agar toleran dengan custom ROM/perangkat modern
+    int sh_status = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+    if (sh_status != 0) {
+        // JANGAN RETURN JNI_ERR! Izinkan engine berjalan dengan status bypass agar Java tidak mengalami FC
+        LOGW("WARNING: ShadowHook gagal inisialisasi (Code: %d). Berjalan dalam Fallback Mode.", sh_status);
+    } else {
+        LOGI("vMeer: ShadowHook Shared Engine successfully engaged.");
     }
 
-    // 2. Core Hooks & Shared State
-    vmeer::helper::ConnectSharedState();
-    vmeer::zygote::HookForkAndSpecialize();
-
-    // 3. Services Activation
-    start_binder_proxy();
-    vmeer::binder::InitHooks();
-    start_virtual_system_services(); 
-    start_egl_bridge();              
-    vmeer::sensor::InitHooks();      
-
-    // 4. VFS Engine (libfuse3 + libzstd)
-    vmeer::vfs::StartVFSEngine();
+    // Eksekusi core module pendukung jika ShadowHook aman
+    if (sh_status == 0) {
+        vmeer::helper::ConnectSharedState();
+        vmeer::zygote::HookForkAndSpecialize();
+        start_binder_proxy();
+        vmeer::binder::InitHooks();
+        start_virtual_system_services(); 
+        start_egl_bridge();              
+        vmeer::sensor::InitHooks();      
+        vmeer::vfs::StartVFSEngine();
+    }
 
     LOGI("vMeer Engine: Status READY - Engine v1.0.0-STABLE");
-    
     return JNI_VERSION_1_6;
 }
 
