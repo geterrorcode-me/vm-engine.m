@@ -10,108 +10,122 @@
 namespace vmeer {
 namespace art {
 
-void ApplyHiddenApiBypass(JNIEnv* env) {
-    jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
-    if (!vm_runtime_clazz) return;
-
-    jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
-
-    jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
-    if (!set_exemptions_mid) return;
-    
-    // Eksperimen bypass API tersembunyi dalvik untuk Android 15 modern
-    jobjectArray str_array = env->NewObjectArray(1, env->FindClass("java/lang/String"), env->NewStringUTF("L"));
-    env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
-
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Hidden API Bypass failed or restricted on Android 15.");
-    } else {
-        LOGI("vMeer ART: Hidden API Bypass executed.");
-    }
-}
-
 bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& mirror_path) {
-    LOGI("vMeer ART: Injecting %s via Manual Element Appending (Android 15 Support)", mirror_path.c_str());
+    LOGI("vMeer ART: Injecting %s via Native Path Elements Maker", mirror_path.c_str());
 
     if (class_loader == nullptr) {
         LOGE("vMeer ART: ClassLoader is NULL!");
         return false;
     }
 
-    // 1. Dapatkan Class dalvik.system.BaseDexClassLoader
+    // 1. Dapatkan dalvik.system.BaseDexClassLoader & pathList
     jclass loader_clazz = env->FindClass("dalvik/system/BaseDexClassLoader");
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
-
-    // 2. Ambil field "pathList" dari BaseDexClassLoader
     jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
-    if (!path_list_fid) { LOGE("vMeer ART: Field pathList not found."); return false; }
-    
     jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
-    if (!path_list_obj) { LOGE("vMeer ART: pathList object is NULL."); return false; }
+    if (!path_list_obj) { LOGE("vMeer ART: pathList is NULL."); return false; }
 
-    // 3. Dapatkan field "dexElements" dari DexPathList
     jclass path_list_clazz = env->GetObjectClass(path_list_obj);
-    jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
-    if (!elements_fid) { LOGE("vMeer ART: Field dexElements not found."); return false; }
 
+    // 2. Ambil array dexElements yang lama
+    jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
     jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
     jsize old_len = (old_elements != nullptr) ? env->GetArrayLength(old_elements) : 0;
 
-    // 4. Buat DexClassLoader sementara (transient) untuk memuat mirror_path (readonly.bin/jar) secara legal
-    jstring j_path = env->NewStringUTF(mirror_path.c_str());
-    jstring optimized_dir = env->NewStringUTF("/data/user/0/com.vmeer.io/code_cache"); // Direktori internal aman
-    
-    jclass dex_loader_clazz = env->FindClass("dalvik/system/DexClassLoader");
-    jmethodID dex_loader_init = env->GetMethodID(dex_loader_clazz, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
-    
-    jobject transient_loader = env->NewObject(dex_loader_clazz, dex_loader_init, j_path, optimized_dir, nullptr, class_loader);
-    if (env->ExceptionCheck() || !transient_loader) {
+    // 3. Cari static method 'makePathElements' di dalam DexPathList untuk memaketkan berkas .bin secara legal
+    // Di Android 9 hingga 15, metodenya adalah: makePathElements(List, File, List)
+    jmethodID make_elements_mid = env->GetStaticMethodID(
+        path_list_clazz, 
+        "makePathElements", 
+        "(Ljava/util/List;Ljava/io/File;Ljava/util/List;)[Ldalvik/system/DexPathList$Element;"
+    );
+
+    if (!make_elements_mid) {
         env->ExceptionClear();
-        LOGE("vMeer ART: Failed to create transient DexClassLoader.");
-        env->DeleteLocalRef(j_path);
-        env->DeleteLocalRef(optimized_dir);
+        // Fallback untuk variasi signature Android tertentu: makeDexElements(List, File, List, ClassLoader)
+        make_elements_mid = env->GetStaticMethodID(
+            path_list_clazz, 
+            "makeDexElements", 
+            "(Ljava/util/List;Ljava/io/File;Ljava/util/List;Ljava/lang/ClassLoader;)[Ldalvik/system/DexPathList$Element;"
+        );
+    }
+
+    if (!make_elements_mid) {
+        LOGE("vMeer ART: Gagal menemukan method pembuat elemen (makePathElements/makeDexElements).");
         return false;
     }
 
-    // 5. Ekstrak "dexElements" dari DexClassLoader sementara tersebut
-    jobject transient_path_list = env->GetObjectField(transient_loader, path_list_fid);
-    jobjectArray transient_elements = (jobjectArray)env->GetObjectField(transient_path_list, elements_fid);
-    jsize transient_len = (transient_elements != nullptr) ? env->GetArrayLength(transient_elements) : 0;
+    // 4. Siapkan parameter untuk pemanggilan method: Buat ArrayList berisi file .bin kita
+    jclass array_list_clazz = env->FindClass("java/util/ArrayList");
+    jmethodID array_list_init = env->GetMethodID(array_list_clazz, "<init>", "()V");
+    jmethodID array_list_add = env->GetMethodID(array_list_clazz, "add", "(Ljava/lang/Object;)Z");
 
-    if (transient_len == 0) {
-        LOGE("vMeer ART: Transient elements is empty. Injection failed.");
-        env->DeleteLocalRef(j_path);
-        env->DeleteLocalRef(optimized_dir);
+    jobject files_list = env->NewObject(array_list_clazz, array_list_init);
+    jclass file_clazz = env->FindClass("java/io/File");
+    jmethodID file_init = env->GetMethodID(file_clazz, "<init>", "(Ljava/lang/String;)V");
+    
+    jstring j_path = env->NewStringUTF(mirror_path.c_str());
+    jobject file_obj = env->NewObject(file_clazz, file_init, j_path);
+    env->CallBooleanMethod(files_list, array_list_add, file_obj);
+
+    // List kosong untuk menampung IOException jika terjadi error kompilasi internal
+    jobject suppressed_exceptions_list = env->NewObject(array_list_clazz, array_list_init);
+
+    // 5. Eksekusi pembuatan Element baru khusus untuk file .bin tersebut
+    jobjectArray new_element_array = nullptr;
+    
+    // Sesuaikan pemanggilan berdasarkan method yang ditemukan
+    jmethodID target_mid = make_elements_mid;
+    jstring method_name_j = env->NewStringUTF("makePathElements"); // Hanya penanda log
+    
+    new_element_array = (jobjectArray)env->CallStaticObjectMethod(
+        path_list_clazz, 
+        target_mid, 
+        files_list, 
+        nullptr, 
+        suppressed_exceptions_list
+    );
+
+    if (env->ExceptionCheck() || !new_element_array) {
+        env->ExceptionClear();
+        LOGE("vMeer ART: Gagal mengekstrak elemen lewat makePathElements murni.");
         return false;
     }
 
-    // 6. Alokasi array baru gabungan (Ukuran = old_len + transient_len)
+    jsize new_elements_len = env->GetArrayLength(new_element_array);
+    if (new_elements_len == 0) {
+        LOGE("vMeer ART: Hasil ekstraksi elemen bernilai kosong (0).");
+        return false;
+    }
+
+    // 6. Alokasikan array gabungan final
     jclass element_clazz = env->FindClass("dalvik/system/DexPathList$Element");
-    jobjectArray combined_elements = env->NewObjectArray(old_len + transient_len, element_clazz, nullptr);
+    jobjectArray combined_elements = env->NewObjectArray(old_len + new_elements_len, element_clazz, nullptr);
 
-    // Salin elemen lawas ke array baru
+    // Salin elemen lama
     for (jsize i = 0; i < old_len; i++) {
         jobject element = env->GetObjectArrayElement(old_elements, i);
         env->SetObjectArrayElement(combined_elements, i, element);
         env->DeleteLocalRef(element);
     }
 
-    // Sisipkan elemen baru dari guest ROM di akhir array
-    for (jsize i = 0; i < transient_len; i++) {
-        jobject element = env->GetObjectArrayElement(transient_elements, i);
+    // Gabungkan elemen baru hasil ekstraksi berkas .bin
+    for (jsize i = 0; i < new_elements_len; i++) {
+        jobject element = env->GetObjectArrayElement(new_element_array, i);
         env->SetObjectArrayElement(combined_elements, old_len + i, element);
         env->DeleteLocalRef(element);
     }
 
-    // 7. Suntikkan kembali array gabungan tersebut ke ClassLoader utama host
+    // 7. Kunci kembali ke ClassLoader host
     env->SetObjectField(path_list_obj, elements_fid, combined_elements);
-    LOGI("vMeer ART: SUCCESS! Mirror Framework injected. Elements combined: %d -> %d", old_len, old_len + transient_len);
+    LOGI("vMeer ART: SUCCESS! Elemen berkas .bin berhasil disatukan. Total: %d -> %d", old_len, old_len + new_elements_len);
 
-    // Cleanup local references
+    // Cleanup refs
     env->DeleteLocalRef(j_path);
-    env->DeleteLocalRef(optimized_dir);
+    env->DeleteLocalRef(files_list);
+    env->DeleteLocalRef(file_obj);
+    env->DeleteLocalRef(suppressed_exceptions_list);
+    env->DeleteLocalRef(method_name_j);
+
     return true;
 }
 
