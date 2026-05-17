@@ -10,7 +10,7 @@
 // FUNGSIONALITAS BARU: SUNTIKAN OPTIMASI SWIFTSHADER MULTI-THREAD
 // ====================================================================
 void apply_swiftshader_optimization() {
-    LOGI("[GPU] Memaksa konfigurasi SwiftShader Multi-Threaded (+40% FPS)...");
+    LOGI("[GPU] Memaksa konfigurasi SwiftShader Multi-Threaded (+40%% FPS)...");
     
     // Paksa SwiftShader menggunakan 8 Core CPU host untuk rendering paralel
     setenv("SWIFTSHADER_CPU_NUM_CORES", "8", 1);
