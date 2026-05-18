@@ -3,12 +3,51 @@ package com.vmeer.io;
 import android.content.Context;
 import android.util.Log;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 public class EngineLoader {
     private static final String TAG = "vMeer_Bridge";
 
     public static native void init_art_hook();
     public static native void perform_mirror_injection(ClassLoader classLoader, String jarPath);
+
+    /**
+     * Mengekstrak berkas .jar pendukung dari assets ke dalam struktur folder VFS rootfs
+     */
+    private static void extractFrameworkFromAssets(Context context, String targetDirPath) {
+        File vfsFrameworkDir = new File(targetDirPath);
+        
+        // Buat folder system/framework secara rekursif di dalam rootfs sandbox jika belum ada
+        if (!vfsFrameworkDir.exists()) {
+            vfsFrameworkDir.mkdirs();
+        }
+
+        String[] jarFiles = {"core-oj.jar", "core-libart.jar", "ext.jar", "framework.jar", "services.jar"};
+
+        for (String jar : jarFiles) {
+            File targetFile = new File(vfsFrameworkDir, jar);
+            
+            // Ekstrak hanya jika berkas fisik belum siap di VFS
+            if (!targetFile.exists()) {
+                try (InputStream in = context.getAssets().open("vmeer_framework/" + jar);
+                     OutputStream out = new FileOutputStream(targetFile)) {
+                    
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                    }
+                    out.flush();
+                    Log.i(TAG, "vMeer Assets: Sukses menyalin " + jar + " ke VFS Rootfs.");
+                } catch (IOException e) {
+                    Log.e(TAG, "vMeer Assets: Gagal mengekstrak komponen framework: " + jar + " -> " + e.getMessage());
+                }
+            }
+        }
+    }
 
     /**
      * Membangunkan biner vmeerd dari folder internal aplikasi agar siap melayani VFS
@@ -38,10 +77,14 @@ public class EngineLoader {
     }
 
     public static void startFrameworkInjection(Context context, ClassLoader classLoader) {
-        // ⚡ LANGKAH UTAMA KUNCI: Bangunkan daemon penata ruang nama berkas sebelum jar diakses
-        awakenDaemonProcess(context);
-
         String vfsFrameworkDir = "/data/user/0/com.vmeer.io/app_app_bin/rootfs/system/framework/";
+
+        // ⚡ LANGKAH PRE-BOOT: Pastikan berkas fisik .jar sudah disalin dari assets sebelum vmeerd menyisir inode table
+        Log.i(TAG, "vMeer OS: Memeriksa kesiapan berkas fisik Java Framework di VFS...");
+        extractFrameworkFromAssets(context, vfsFrameworkDir);
+
+        // ⚡ LANGKAH UTAMA KUNCI: Bangunkan daemon penata ruang nama berkas setelah jar siap
+        awakenDaemonProcess(context);
         
         String[] targetJars = {
             "core-oj.jar",
