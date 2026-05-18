@@ -16,18 +16,17 @@ public class EngineLoader {
     public static native void perform_mirror_injection(ClassLoader classLoader, String jarPath);
 
     /**
-     * Memastikan biner vmeerd ter-deploy dari assets ke internal storage privat aplikasi.
+     * Memastikan biner vmeerd ter-deploy ke folder target mutlak: app_app_bin
      */
     private static void deployDaemonFromAssets(Context context, File targetDaemonFile) {
-        // Buat folder induk (app_bin) jika belum tercipta
         File parentDir = targetDaemonFile.getParentFile();
         if (parentDir != null && !parentDir.exists()) {
             parentDir.mkdirs();
         }
 
-        // Ekstrak hanya jika berkas belum ada di internal storage
+        // Ekstrak berkas jika belum tersedia secara fisik
         if (!targetDaemonFile.exists()) {
-            Log.i(TAG, "vMeer Bootstrap: Menggandakan biner vmeerd dari assets ke storage privat...");
+            Log.i(TAG, "vMeer Bootstrap: Menggandakan biner vmeerd dari assets ke target mutlak...");
             try (InputStream in = context.getAssets().open("vmeer_bin/vmeerd");
                  OutputStream out = new FileOutputStream(targetDaemonFile)) {
                 
@@ -37,15 +36,15 @@ public class EngineLoader {
                     out.write(buffer, 0, read);
                 }
                 out.flush();
-                Log.i(TAG, "vMeer Bootstrap: Deployment vmeerd sukses.");
+                Log.i(TAG, "vMeer Bootstrap: Deployment vmeerd ke app_app_bin SUKSES.");
                 
             } catch (IOException e) {
-                Log.e(TAG, "vMeer Bootstrap: CRITICAL! Gagal mengekstrak biner vmeerd: " + e.getMessage());
+                Log.e(TAG, "vMeer Bootstrap: CRITICAL! Gagal deploy vmeerd: " + e.getMessage());
                 return;
             }
         }
 
-        // 🔥 PROTEKSI EKSEKUSI: Berikan hak akses Executable penuh (rwxr-xr-x)
+        // 🔥 PROTEKSI EKSEKUSI: Berikan hak akses Executable penuh
         if (targetDaemonFile.exists()) {
             boolean isExecSet = targetDaemonFile.setExecutable(true, false);
             Log.d(TAG, "vMeer Safety: Mengunci izin eksekusi vmeerd -> Status Executable: " + isExecSet);
@@ -53,7 +52,7 @@ public class EngineLoader {
     }
 
     /**
-     * Mengekstrak berkas .jar pendukung dari assets ke dalam struktur folder VFS rootfs
+     * Mengekstrak berkas .jar pendukung dari assets ke dalam struktur folder VFS rootfs (app_app_bin)
      */
     private static void extractFrameworkFromAssets(Context context, String targetDirPath) {
         File vfsFrameworkDir = new File(targetDirPath);
@@ -104,16 +103,16 @@ public class EngineLoader {
     }
 
     /**
-     * Membangunkan biner vmeerd dari folder internal data aplikasi secara dinamis
+     * Membangunkan biner vmeerd murni dari folder internal app_app_bin sesuai kebutuhan C++
      */
-    private static String awakenDaemonProcess(Context context) {
+    private static void awakenDaemonProcess(Context context) {
         try {
             String baseDataDir = context.getFilesDir().getParent();
             
-            // Tentukan jalur prioritas utama di /app_bin/vmeerd
-            File daemonFile = new File(baseDataDir + "/app_bin/vmeerd");
+            // 🔒 KUNCI UTAMAKAN: Samakan jalur dengan hardcode di cpp Anda
+            File daemonFile = new File(baseDataDir + "/app_app_bin/vmeerd");
             
-            // Jalankan sub-rutin deployment untuk memastikan eksistensi fisik berkas
+            // Jalankan paksa sekuensial deployment
             deployDaemonFromAssets(context, daemonFile);
             
             if (daemonFile.exists()) {
@@ -122,28 +121,27 @@ public class EngineLoader {
                 
                 // Beri jeda 350ms agar abstract socket server selesai melakukan bind() di kernel
                 Thread.sleep(350);
-                
-                return daemonFile.getParentFile().getName(); // Mengembalikan "app_bin"
             } else {
-                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd tetap tidak ditemukan setelah fase force-deploy.");
+                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd gagal dieksekusi di target mutlak.");
             }
         } catch (Exception e) {
             Log.e(TAG, "vMeer Bootstrap: Gagal memicu eksekusi daemon: " + e.getMessage());
         }
-        return "app_bin";
     }
 
     /**
      * Titik entri utama Lapisan 2 untuk menyatukan struktur Java Runtime Framework kontainer
      */
     public static void startFrameworkInjection(Context context, ClassLoader classLoader) {
-        // ⚡ LANGKAH PRE-BOOT 1: Deploy & Bangunkan daemon vmeerd
-        String activeBinFolder = awakenDaemonProcess(context);
+        // ⚡ LANGKAH PRE-BOOT 1: Jalankan sekuensial daemon pada jalur app_app_bin
+        awakenDaemonProcess(context);
         
-        // Sesuaikan target lokasi rootfs system framework berdasarkan folder aktif
-        String vfsFrameworkDir = context.getFilesDir().getParent() + "/" + activeBinFolder + "/rootfs/system/framework/";
+        String baseDataDir = context.getFilesDir().getParent();
+        
+        // Target lokasi dipaksa sinkron murni ke folder app_app_bin
+        String vfsFrameworkDir = baseDataDir + "/app_app_bin/rootfs/system/framework/";
 
-        // ⚡ LANGKAH PRE-BOOT 2: Ekstrak berkas dan amankan tanda tangan Read-Only sebelum diendus ART
+        // ⚡ LANGKAH PRE-BOOT 2: Ekstrak berkas framework
         Log.i(TAG, "vMeer OS: Memeriksa kesiapan berkas fisik Java Framework di VFS -> " + vfsFrameworkDir);
         extractFrameworkFromAssets(context, vfsFrameworkDir);
         
