@@ -154,7 +154,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     LOGI("vMeer ART: SUCCESS! Elemen %s berhasil disisipkan. Total komponen aktif: %d", 
           clean_jar_name.c_str(), old_len + new_elements_len);
 
-    // Bersihkan referensi lokal JNI untuk mencegah kejenuhan tabel referensi lokal di Android 15
+    // Bersihkan referensi lokal JNI
     env->DeleteLocalRef(j_path);
     env->DeleteLocalRef(files_list);
     env->DeleteLocalRef(file_obj);
@@ -166,13 +166,26 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 } // namespace art
 } // namespace vmeer
 
-// JNI Export Bridge (Berada di luar scope namespace)
-extern "C" JNIEXPORT void JNICALL
+// =============================================================================
+// GERBANG JNI & CROSS-MODULE SYMBOL EXPORT
+// =============================================================================
+
+extern "C" {
+
+// Ekspor fungsi C murni dengan visibilitas publik untuk menyelesaikan 'undefined symbol' di libvmeer_engine.so
+__attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path) {
+    if (path != nullptr) {
+        vmeer::art::InjectMirrorFramework(env, class_loader, path);
+    }
+}
+
+// Handler JNI Bridge untuk pemanggilan langsung dari sisi Java (EngineLoader)
+JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
     vmeer::art::ApplyHiddenApiBypass(env);
 }
 
-extern "C" JNIEXPORT void JNICALL
+JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass clazz, jobject class_loader, jstring path) {
     if (!path) return;
     const char* native_path = env->GetStringUTFChars(path, nullptr);
@@ -181,3 +194,5 @@ Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass cl
         env->ReleaseStringUTFChars(path, native_path);
     }
 }
+
+} // extern "C"
