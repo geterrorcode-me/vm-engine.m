@@ -70,44 +70,53 @@ public class EngineLoader {
     }
 
     /**
-     * Membangunkan biner vmeerd dari folder internal aplikasi agar siap melayani VFS
+     * Membangunkan biner vmeerd dari folder internal data aplikasi secara dinamis
      */
-    private static void awakenDaemonProcess(Context context) {
+    private static String awakenDaemonProcess(Context context) {
         try {
-            // Asumsi biner vmeerd hasil kompilasi ditaruh di direktori internal files/ bin aplikasi
-            String internalBinDir = context.getFilesDir().getParent() + "/app_app_bin";
-            String daemonPath = internalBinDir + "/vmeerd";
+            // Deteksi lokasi dasar folder data aplikasi (/data/user/0/com.vmeer.io)
+            String baseDataDir = context.getFilesDir().getParent();
             
-            File daemonFile = new File(daemonPath);
+            // 🛠️ OPTIMASI LOGIK: Cek folder app_bin terlebih dahulu, jika kosong gunakan app_app_bin
+            File daemonFile = new File(baseDataDir + "/app_bin/vmeerd");
+            if (!daemonFile.exists()) {
+                daemonFile = new File(baseDataDir + "/app_app_bin/vmeerd");
+            }
+            
             if (daemonFile.exists()) {
-                // Berikan akses eksekusi penuh jika terhapus/ter-reset otomatis oleh OS host
+                // Berikan akses eksekusi penuh jika ter-reset otomatis oleh OS host
                 daemonFile.setExecutable(true, false);
                 
-                Log.i(TAG, "vMeer Bootstrap: Membangunkan native daemon vmeerd...");
-                Runtime.getRuntime().exec(new String[]{daemonPath});
+                Log.i(TAG, "vMeer Bootstrap: Membangunkan native daemon vmeerd dari -> " + daemonFile.getAbsolutePath());
+                Runtime.getRuntime().exec(new String[]{daemonFile.getAbsolutePath()});
                 
                 // Beri jeda 350ms agar abstract socket server selesai melakukan bind() di kernel
                 Thread.sleep(350);
+                
+                // Kembalikan nama subfolder induk yang valid untuk penyelarasan VFS target
+                return daemonFile.getParentFile().getName();
             } else {
-                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd tidak ditemukan di " + daemonPath);
+                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd tidak ditemukan di struktur folder internal manapun.");
             }
         } catch (Exception e) {
             Log.e(TAG, "vMeer Bootstrap: Gagal memicu eksekusi daemon: " + e.getMessage());
         }
+        return "app_app_bin"; // Fallback default jika terjadi anomali I/O
     }
 
     /**
      * Titik entri utama Lapisan 2 untuk menyatukan struktur Java Runtime Framework kontainer
      */
     public static void startFrameworkInjection(Context context, ClassLoader classLoader) {
-        String vfsFrameworkDir = "/data/user/0/com.vmeer.io/app_app_bin/rootfs/system/framework/";
+        // ⚡ LANGKAH PRE-BOOT 1: Bangunkan daemon dan dapatkan folder biner aktif secara real-time
+        String activeBinFolder = awakenDaemonProcess(context);
+        
+        // Sesuaikan target lokasi rootfs system framework berdasarkan folder aktif
+        String vfsFrameworkDir = context.getFilesDir().getParent() + "/" + activeBinFolder + "/rootfs/system/framework/";
 
-        // ⚡ LANGKAH PRE-BOOT: Ekstrak berkas dan amankan tanda tangan Read-Only sebelum diendus ART
-        Log.i(TAG, "vMeer OS: Memeriksa kesiapan berkas fisik Java Framework di VFS...");
+        // ⚡ LANGKAH PRE-BOOT 2: Ekstrak berkas dan amankan tanda tangan Read-Only sebelum diendus ART
+        Log.i(TAG, "vMeer OS: Memeriksa kesiapan berkas fisik Java Framework di VFS -> " + vfsFrameworkDir);
         extractFrameworkFromAssets(context, vfsFrameworkDir);
-
-        // ⚡ LANGKAH UTAMA KUNCI: Bangunkan daemon penata ruang nama berkas setelah jar siap
-        awakenDaemonProcess(context);
         
         String[] targetJars = {
             "core-oj.jar",
@@ -120,8 +129,6 @@ public class EngineLoader {
         Log.i(TAG, "vMeer OS: Memulai Lapisan 2 - Runtime Framework Injection...");
 
         // Jalankan bypass kebijakan hidden API internal Android 15
-        // Catatan: Jika dipanggil dari attachBaseContext, library native belum di-load, 
-        // sehingga blok try-catch ini krusial untuk mencegah crash (akan dieksekusi ulang saat engine siap).
         try {
             init_art_hook();
         } catch (Throwable t) {
