@@ -1,50 +1,20 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeerd.cpp",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp",
       "selection": {
         "end": {
           "column": 0,
-          "index": 4790,
-          "line": 125
+          "index": 11283,
+          "line": 303
         },
         "start": {
           "column": 0,
-          "index": 4790,
-          "line": 125
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/java/com/vmeer/io/EngineLoader.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 3539,
-          "line": 87
-        },
-        "start": {
-          "column": 0,
-          "index": 3539,
-          "line": 87
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp",
-      "selection": {
-        "end": {
-          "column": 53,
-          "index": 8789,
-          "line": 202
-        },
-        "start": {
-          "column": 53,
-          "index": 8789,
-          "line": 202
+          "index": 11283,
+          "line": 303
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_engine.cpp"
 }

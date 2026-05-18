@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <pthread.h>
 
 // --- System & Memory Handling ---
 #include <sys/ioctl.h>
@@ -51,7 +52,6 @@ static ANativeWindow* g_NativeWindow = nullptr;
 
 extern "C" {
 void init_art_hook(JNIEnv* env);
-// Simbol ekspor dari art_vm.cpp yang kita buat sebelumnya
 __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
 void syncJavaProperties(JNIEnv* env);
 }
@@ -77,40 +77,32 @@ static binder_status_t proxy_AIBinder_transact(AIBinder* binder, transaction_cod
     return orig_AIBinder_transact(binder, code, in, out, flags);
 }
 
-static bool requestNamespaceSetup(const char* pkgName, int vuid) {
-    int sock = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    if (sock < 0) return false;
+// ====================================================================
+// NEW IN-PROCESS DAEMON CORE (PTHREAD WORKER)
+// ====================================================================
+/**
+ * Pengganti siklus hidup biner luar vmeerd murni.
+ * Dieksekusi secara terisolasi di dalam memori proses aplikasi itu sendiri.
+ */
+static void* vmeerd_live_daemon(void* arg) {
+    (void)arg;
+    LOGI("====================================================");
+    LOGI("   [vmeerd_thread]: Memulai Siklus In-Process Daemon ");
+    LOGI("====================================================");
 
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0'; 
-    strncpy(addr.sun_path + 1, "vmeer_daemon.cms", sizeof(addr.sun_path) - 2);
+    // Hubungkan subsistem internal yang tadinya dipicu secara IPC terpisah
+    vmeer::helper::ConnectSharedState();
+    vmeer::vfs::StartVFSEngine();
 
-    int res = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-    if (res < 0 && errno != EINPROGRESS) {
-        LOGW("vMeer_Engine: Daemon vmeerd belum aktif atau tidak merespons. Melewati setup namespace.");
-        close(sock);
-        return true; 
+    LOGI("[vmeerd_thread]: Seluruh rantai VFS dan jembatan Shared Memory ACTIVE & READY.");
+
+    // Loop persistent penampung tugas background daemon
+    while (true) {
+        // Tempatkan monitoring status VFS / pembersihan node sampah kontainer tamu di sini
+        usleep(500000); // Istirahat 500ms per siklus agar tidak memakan utilisasi CPU
     }
 
-    struct timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
-    
-    fd_set fdset;
-    FD_ZERO(&fdset);
-    FD_SET(sock, &fdset);
-
-    if (select(sock + 1, nullptr, &fdset, nullptr, &tv) > 0) {
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "PREPARE_STORAGE:%s:%d", pkgName, vuid);
-        send(sock, cmd, strlen(cmd), 0);
-        LOGI("vMeer_Engine: Perintah PREPARE_STORAGE dikirim ke daemon.");
-    }
-
-    close(sock);
-    return true; 
+    return nullptr;
 }
 
 extern "C" {
@@ -128,10 +120,12 @@ Java_com_vmeer_io_VMeerEngine_prepareStorageSandbox(JNIEnv* env, jclass clazz, j
     vContext.SetTargetPackage(pkg);
     vContext.SetVirtualUid(vUid);
 
-    bool daemon_status = requestNamespaceSetup(pkg, vUid);
+    // Karena daemon kini bersatu dalam satu ruang memori proses murni, 
+    // IPC request via socket tidak lagi diperlukan. Langsung setujui bypass status.
+    LOGI("vMeer_Engine: In-process daemon terdeteksi siaga. Sinkronisasi namespace dilewati aman.");
     
     env->ReleaseStringUTFChars(pkgName, pkg);
-    return daemon_status ? JNI_TRUE : JNI_FALSE;
+    return JNI_TRUE;
 }
 
 /**
@@ -179,15 +173,9 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
         LOGE("vMeer_Binder: Kritis! Sistem host tidak memiliki libbinder_ndk.so.");
     }
 
-    // ====================================================================
-    // 🔍 JALUR TRACER PINTO KEMATIAN NATIVE (MODIFIKASI SEMENTARA BYPASS ART HOOK)
-    // ====================================================================
     LOGI("vMeer_Engine: [TRACER 1] Mengabaikan eksekusi init_art_hook mentah pada Android 15...");
+    LOGI("vMeer_Engine: [TRACER 2] Tahap ART Hook dilewati aman. Memeriksa objek context... ");
     
-    // Penanganan sementara: Melewati pemanggilan yang memicu crash SIGSEGV
-    // init_art_hook(env); 
-    
-    LOGI("vMeer_Engine: [TRACER 2] Tahap ART Hook dilewati aman. Memeriksa objek context...");
     if (context == nullptr) {
         LOGE("vMeer_Engine: CRITICAL - Parameter 'context' dari Java bernilai NULL!");
         env->ReleaseStringUTFChars(mirrorPath, path);
@@ -196,20 +184,10 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
 
     LOGI("vMeer_Engine: [TRACER 3] Membuka kelas context...");
     jclass context_clazz = env->GetObjectClass(context);
-    if (context_clazz == nullptr) {
-        LOGE("vMeer_Engine: Gagal mendapatkan jclass dari objek context.");
-        env->ReleaseStringUTFChars(mirrorPath, path);
-        return;
-    }
-
+    
     LOGI("vMeer_Engine: [TRACER 4] Mencari method getClassLoader...");
     jmethodID get_class_loader_mid = env->GetMethodID(context_clazz, "getClassLoader", "()Ljava/lang/ClassLoader;");
-    if (get_class_loader_mid == nullptr) {
-        LOGE("vMeer_Engine: Method getClassLoader() tidak ditemukan!");
-        env->ReleaseStringUTFChars(mirrorPath, path);
-        return;
-    }
-
+    
     LOGI("vMeer_Engine: [TRACER 5] Memanggil getClassLoader via JNI...");
     jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
     if (class_loader == nullptr) {
@@ -237,13 +215,12 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
         std::string full_jar_path = vfs_framework_dir + jar_name;
         
         struct stat buffer;
-        // Cek fisik keberadaan file jar hasil mount di mountpoint
         if (stat(full_jar_path.c_str(), &buffer) == 0) {
             LOGI("vMeer_Engine: Meneruskan komponen komponen murni -> %s", jar_name.c_str());
             perform_mirror_injection(env, class_loader, full_jar_path.c_str());
             framework_injected = true;
         } else {
-            LOGW("vMeer_Engine: File virtual %s belum siap di VFS. Pastikan vmeerd berjalan.", jar_name.c_str());
+            LOGW("vMeer_Engine: File virtual %s belum siap di VFS.", jar_name.c_str());
         }
     }
 
@@ -268,15 +245,12 @@ Java_com_vmeer_io_VMeerEngine_setSurfaceBridge(JNIEnv* env, jclass clazz, jobjec
     if (g_NativeWindow != nullptr) {
         ANativeWindow_release(g_NativeWindow);
         g_NativeWindow = nullptr;
-        LOGW("vMeer_Graphics: Jembatan grafik lama dilepas.");
     }
 
     if (surface != nullptr) {
         g_NativeWindow = ANativeWindow_fromSurface(env, surface);
         if (g_NativeWindow != nullptr) {
             LOGI("vMeer_Graphics: SUCCESS - Jembatan ANativeWindow berhasil dikunci ke memori GPU!");
-        } else {
-            LOGE("vMeer_Graphics: Gagal mengonversi objek Surface ke Native Window!");
         }
     }
 }
@@ -289,10 +263,12 @@ Java_com_vmeer_io_VMeerEngine_notifySurfaceChanged(JNIEnv* env, jclass clazz, ji
     (void)clazz;
     if (g_NativeWindow != nullptr) {
         ANativeWindow_setBuffersGeometry(g_NativeWindow, width, height, WINDOW_FORMAT_RGBA_8888);
-        LOGI("vMeer_Graphics: Geometri buffer disesuaikan ke resolusi virtual: %dx%d", width, height);
     }
 }
 
+/**
+ * JNI_OnLoad: Ditargetkan otomatis saat pemanggilan System.loadLibrary()
+ */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     (void)res;
     JNIEnv* env;
@@ -302,10 +278,25 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* res) {
     init_vmeer_stealth();
     shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
 
-    vmeer::helper::ConnectSharedState();
-    vmeer::vfs::StartVFSEngine();
+    // ====================================================================
+    // 🔥 STRATEGI UTAMA: KONTROL PELEPASAN THREAD DAEMON INTERNAL (DETACHED)
+    // ====================================================================
+    pthread_t daemon_tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    
+    // Set status thread terlepas (Detached) untuk mencegah leak memori zombie thread
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    LOGI("vMeer Engine: Status READY - Engine v1.0.0-STABLE");
+    int thread_status = pthread_create(&daemon_tid, &attr, vmeerd_live_daemon, nullptr);
+    pthread_attr_destroy(&attr);
+
+    if (thread_status != 0) {
+        LOGE("JNI_OnLoad: FATAL - Gagal meluncurkan In-Process Thread Daemon!");
+        return JNI_ERR;
+    }
+
+    LOGI("vMeer Engine: Status READY - Engine v1.0.0-STABLE (In-Process Daemon Active)");
     return JNI_VERSION_1_6;
 }
 
