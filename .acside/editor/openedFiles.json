@@ -10,26 +10,11 @@
         },
         "start": {
           "column": 0,
-          "index": 7135,
-          "line": 171
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_bridge.cpp",
-      "selection": {
-        "end": {
-          "column": 69,
-          "index": 525,
-          "line": 12
-        },
-        "start": {
-          "column": 69,
-          "index": 525,
-          "line": 12
+          "index": 0,
+          "line": 0
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_bridge.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp"
 }

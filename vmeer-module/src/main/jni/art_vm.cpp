@@ -33,8 +33,15 @@ void ApplyHiddenApiBypass(JNIEnv* env) {
     }
 }
 
-bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& mirror_path) {
-    LOGI("vMeer ART: Injecting %s via Native Path Elements Maker", mirror_path.c_str());
+bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& jar_path) {
+    // 🛡️ PROTEKSI BARU: Validasi agar kontainer .bin tidak nyasar ke ART Layer
+    if (jar_path.find(".bin") != std::string::npos) {
+        LOGE("vMeer ART: REJECTED! %s adalah container biner mentah.", jar_path.c_str());
+        LOGE("vMeer ART: Lapisan ART hanya menerima berkas .jar yang sudah diekstrak/di-mount lewat VFS!");
+        return false;
+    }
+
+    LOGI("vMeer ART: Menyuntikkan Target Jar -> %s", jar_path.c_str());
 
     if (class_loader == nullptr) {
         LOGE("vMeer ART: ClassLoader is NULL!");
@@ -46,16 +53,16 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
 
     jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
-    if (!path_list_fid) { LOGE("vMeer ART: Field pathList not found."); return false; }
+    if (!path_list_fid) { LOGE("vMeer ART: Field pathList tidak ditemukan."); return false; }
 
     jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
-    if (!path_list_obj) { LOGE("vMeer ART: pathList is NULL."); return false; }
+    if (!path_list_obj) { LOGE("vMeer ART: pathList bernilai NULL."); return false; }
 
     jclass path_list_clazz = env->GetObjectClass(path_list_obj);
 
-    // 2. Ambil array dexElements yang lama
+    // 2. Ambil array dexElements host
     jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
-    if (!elements_fid) { LOGE("vMeer ART: Field dexElements not found."); return false; }
+    if (!elements_fid) { LOGE("vMeer ART: Field dexElements tidak ditemukan."); return false; }
 
     jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
     jsize old_len = (old_elements != nullptr) ? env->GetArrayLength(old_elements) : 0;
@@ -69,7 +76,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     if (!make_elements_mid) {
         env->ExceptionClear();
-        // Fallback untuk variasi signature Android tertentu (makeDexElements)
+        // Fallback Android lama/vendor tweak khusus (makeDexElements)
         make_elements_mid = env->GetStaticMethodID(
             path_list_clazz, 
             "makeDexElements", 
@@ -78,11 +85,11 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     }
 
     if (!make_elements_mid) {
-        LOGE("vMeer ART: Gagal menemukan method pembuat elemen (makePathElements/makeDexElements).");
+        LOGE("vMeer ART: Gagal memetakan method pembuat elemen internal ART.");
         return false;
     }
 
-    // 4. Siapkan parameter untuk pemanggilan method: Buat ArrayList berisi file .bin kita
+    // 4. Bungkus berkas framework .jar ke dalam java.util.ArrayList
     jclass array_list_clazz = env->FindClass("java/util/ArrayList");
     jmethodID array_list_init = env->GetMethodID(array_list_clazz, "<init>", "()V");
     jmethodID array_list_add = env->GetMethodID(array_list_clazz, "add", "(Ljava/lang/Object;)Z");
@@ -91,14 +98,13 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     jclass file_clazz = env->FindClass("java/io/File");
     jmethodID file_init = env->GetMethodID(file_clazz, "<init>", "(Ljava/lang/String;)V");
     
-    jstring j_path = env->NewStringUTF(mirror_path.c_str());
+    jstring j_path = env->NewStringUTF(jar_path.c_str());
     jobject file_obj = env->NewObject(file_clazz, file_init, j_path);
     env->CallBooleanMethod(files_list, array_list_add, file_obj);
 
-    // List kosong untuk menampung IOException jika terjadi error kompilasi internal
     jobject suppressed_exceptions_list = env->NewObject(array_list_clazz, array_list_init);
 
-    // 5. Eksekusi pembuatan Element baru khusus untuk file .bin tersebut
+    // 5. Eksekusi parsing dex ke objek Element
     jobjectArray new_element_array = (jobjectArray)env->CallStaticObjectMethod(
         path_list_clazz, 
         make_elements_mid, 
@@ -109,21 +115,17 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     if (env->ExceptionCheck() || !new_element_array) {
         env->ExceptionClear();
-        LOGE("vMeer ART: Gagal mengekstrak elemen lewat makePathElements murni.");
-        env->DeleteLocalRef(j_path);
-        env->DeleteLocalRef(files_list);
-        env->DeleteLocalRef(file_obj);
-        env->DeleteLocalRef(suppressed_exceptions_list);
+        LOGE("vMeer ART: Gagal mengekstrak elemen berkas .jar lewat ART core.");
+        env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
+        env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
         return false;
     }
 
     jsize new_elements_len = env->GetArrayLength(new_element_array);
     if (new_elements_len == 0) {
-        LOGE("vMeer ART: Hasil ekstraksi elemen bernilai kosong (0).");
-        env->DeleteLocalRef(j_path);
-        env->DeleteLocalRef(files_list);
-        env->DeleteLocalRef(file_obj);
-        env->DeleteLocalRef(suppressed_exceptions_list);
+        LOGE("vMeer ART: Hasil dekapsulasi .jar kosong (classes.dex tidak terbaca/corrupt).");
+        env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
+        env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
         return false;
     }
 
@@ -131,23 +133,24 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     jclass element_clazz = env->FindClass("dalvik/system/DexPathList$Element");
     jobjectArray combined_elements = env->NewObjectArray(old_len + new_elements_len, element_clazz, nullptr);
 
-    // Salin elemen lama
+    // Salin elemen lama host
     for (jsize i = 0; i < old_len; i++) {
         jobject element = env->GetObjectArrayElement(old_elements, i);
         env->SetObjectArrayElement(combined_elements, i, element);
         env->DeleteLocalRef(element);
     }
 
-    // Gabungkan elemen baru hasil ekstraksi berkas .bin
+    // Gabungkan elemen baru dari virtual framework .jar
     for (jsize i = 0; i < new_elements_len; i++) {
         jobject element = env->GetObjectArrayElement(new_element_array, i);
         env->SetObjectArrayElement(combined_elements, old_len + i, element);
         env->DeleteLocalRef(element);
     }
 
-    // 7. Kunci kembali ke ClassLoader host
+    // 7. Kunci ke ClassLoader aktif
     env->SetObjectField(path_list_obj, elements_fid, combined_elements);
-    LOGI("vMeer ART: SUCCESS! Elemen berkas .bin berhasil disatukan. Total: %d -> %d", old_len, old_len + new_elements_len);
+    LOGI("vMeer ART: SUCCESS! Elemen %s berhasil disisipkan. Total elemen aktif: %d", 
+          jar_path.substr(jar_path.find_last_of("/\\") + 1).c_str(), old_len + new_elements_len);
 
     // Cleanup refs
     env->DeleteLocalRef(j_path);
@@ -161,7 +164,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 } // namespace art
 } // namespace vmeer
 
-// Gerbang JNI Luar (Berada di luar lingkup namespace vmeer::art)
+// Gerbang JNI Eksternal
 extern "C" void init_art_hook(JNIEnv* env) {
     vmeer::art::ApplyHiddenApiBypass(env);
 }
