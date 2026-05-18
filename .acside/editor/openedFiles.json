@@ -1,17 +1,32 @@
 {
   "allFiles": [
     {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/java/com/vmeer/io/EngineLoader.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2323,
+          "line": 58
+        },
+        "start": {
+          "column": 0,
+          "index": 2323,
+          "line": 58
+        }
+      }
+    },
+    {
       "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp",
       "selection": {
         "end": {
           "column": 0,
-          "index": 7135,
-          "line": 171
+          "index": 8243,
+          "line": 183
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 8243,
+          "line": 183
         }
       }
     }
