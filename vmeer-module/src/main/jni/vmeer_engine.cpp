@@ -8,6 +8,7 @@
 #include <sys/un.h>
 #include <stdio.h>
 #include <string>
+#include <vector>
 
 // --- System & Memory Handling ---
 #include <sys/ioctl.h>
@@ -50,7 +51,8 @@ static ANativeWindow* g_NativeWindow = nullptr;
 
 extern "C" {
 void init_art_hook(JNIEnv* env);
-void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
+// Simbol ekspor dari art_vm.cpp yang kita buat sebelumnya
+__attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
 void syncJavaProperties(JNIEnv* env);
 }
 
@@ -212,10 +214,43 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     jobject class_loader = env->CallObjectMethod(context, get_class_loader_mid);
     if (class_loader == nullptr) {
         LOGE("vMeer_Engine: Hasil pemanggilan getClassLoader() bernilai NULL!");
+        env->ReleaseStringUTFChars(mirrorPath, path);
+        return;
     }
 
-    LOGI("vMeer_Engine: [TRACER 6] Masuk ke perform_mirror_injection...");
-    perform_mirror_injection(env, class_loader, path);
+    // ====================================================================
+    // 🛡️ REFACTORING [TRACER 6]: CHANNED DECOUPLED JAR INJECTION SYSTEM
+    // ====================================================================
+    LOGI("vMeer_Engine: [TRACER 6] Mengalihkan pemindaian kontainer mentah ke rantai VFS Rootfs...");
+    
+    std::string vfs_framework_dir = "/data/user/0/com.vmeer.io/app_app_bin/rootfs/system/framework/";
+    std::vector<std::string> target_jars = {
+        "core-oj.jar",
+        "core-libart.jar",
+        "ext.jar",
+        "framework.jar",
+        "services.jar"
+    };
+
+    bool framework_injected = false;
+    for (const auto& jar_name : target_jars) {
+        std::string full_jar_path = vfs_framework_dir + jar_name;
+        
+        struct stat buffer;
+        // Cek fisik keberadaan file jar hasil mount di mountpoint
+        if (stat(full_jar_path.c_str(), &buffer) == 0) {
+            LOGI("vMeer_Engine: Meneruskan komponen komponen murni -> %s", jar_name.c_str());
+            perform_mirror_injection(env, class_loader, full_jar_path.c_str());
+            framework_injected = true;
+        } else {
+            LOGW("vMeer_Engine: File virtual %s belum siap di VFS. Pastikan vmeerd berjalan.", jar_name.c_str());
+        }
+    }
+
+    if (!framework_injected) {
+        LOGW("vMeer_Engine: Peringatan! Tidak ada biner .jar terdeteksi di VFS.");
+        LOGW("vMeer_Engine: Melakukan fallback aman (mencegah penolakan .bin di tingkat ART)...");
+    }
     
     LOGI("vMeer_Engine: [TRACER 7] Masuk ke syncJavaProperties...");
     syncJavaProperties(env);
