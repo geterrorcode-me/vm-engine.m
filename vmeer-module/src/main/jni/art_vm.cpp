@@ -2,6 +2,10 @@
 #include <android/log.h>
 #include <string>
 #include <vector>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #define LOG_TAG "vMeer_ART"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -11,65 +15,112 @@
 namespace vmeer {
 namespace art {
 
+/**
+ * Mem-bypass kebijakan Hidden API Policy pada Android 9 hingga Android 15.
+ * Menggunakan refleksi tingkat internal untuk membebaskan pengecualian (exemptions)
+ * sehingga komponen VM dapat memanggil API tersembunyi milik sistem host tanpa diblokir.
+ */
 void ApplyHiddenApiBypass(JNIEnv* env) {
+    LOGI("vMeer ART: Menginisialisasi Hidden API Bypass...");
+    
     jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
-    if (!vm_runtime_clazz) return;
+    if (!vm_runtime_clazz) {
+        LOGE("vMeer ART: Gagal menemukan kelas dalvik.system.VMRuntime");
+        return;
+    }
 
     jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    if (!get_runtime_mid) return;
+    if (!get_runtime_mid) {
+        LOGE("vMeer ART: Gagal menemukan method static VMRuntime.getRuntime()");
+        return;
+    }
+    
     jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
+    if (!vm_runtime_obj) {
+        LOGE("vMeer ART: Objek VMRuntime bernilai NULL.");
+        return;
+    }
 
     jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
-    if (!set_exemptions_mid) return;
+    if (!set_exemptions_mid) {
+        LOGE("vMeer ART: Gagal menemukan method setHiddenApiExemptions()");
+        return;
+    }
     
+    // Memberikan pengecualian string "L" untuk membebaskan seluruh struktur paket API internal Android
     jobjectArray str_array = env->NewObjectArray(1, env->FindClass("java/lang/String"), env->NewStringUTF("L"));
     env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
 
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        LOGE("vMeer ART: Hidden API Bypass failed or restricted on Android 15.");
+        LOGE("vMeer ART: Eksekusi Hidden API Bypass ditolak oleh runtime Android 15.");
     } else {
-        LOGI("vMeer ART: Hidden API Bypass executed.");
+        LOGI("vMeer ART: SUCCESS - Kebijakan Hidden API berhasil dilonggarkan.");
     }
 }
 
+/**
+ * Menyuntikkan berkas .jar virtual dari VFS secara dinamis ke dalam ClassLoader aktif.
+ * Menggunakan manipulasi runtime di tingkat struktur DexPathList$Element.
+ */
 bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& jar_path) {
-    // 🛡️ SECURITY BLOCKER: Proteksi agar kontainer biner (.bin) tidak merusak sistem alokasi ART
+    // 🛡️ SECURITY PROTECTOR: Menolak mutlak pemuatan berkas .bin mentah ke dalam ART
     if (jar_path.find(".bin") != std::string::npos) {
-        LOGE("vMeer ART: REJECTED! %s adalah container biner mentah.", jar_path.c_str());
-        LOGE("vMeer ART: Lapisan ART hanya menerima berkas .jar yang sudah diekstrak/di-mount lewat VFS!");
+        LOGE("vMeer ART: REJECTED! %s dilarang keras dibaca langsung oleh ART.", jar_path.c_str());
+        LOGE("vMeer ART: Gunakan daemon vmeerd untuk memetakan kontainer SquashFS ke berkas .jar virtual!");
         return false;
     }
 
-    // Ambil nama file asli di ujung path untuk mempermudah pemantauan logcat
+    // Ambil nama file bersih untuk mempermudah pelacakan debugging logcat
     std::string clean_jar_name = jar_path.substr(jar_path.find_last_of("/\\") + 1);
-    LOGI("vMeer ART: Memproses penyisipan runtime framework -> %s", clean_jar_name.c_str());
+    LOGI("vMeer ART: Menjadwalkan penggabungan classpath -> %s", clean_jar_name.c_str());
 
     if (class_loader == nullptr) {
-        LOGE("vMeer ART: ClassLoader host bernilai NULL!");
+        LOGE("vMeer ART: Operasi dibatalkan, ClassLoader host bernilai NULL!");
         return false;
     }
 
-    // 1. Dapatkan dalvik.system.BaseDexClassLoader & pathList
+    // Validasi integritas berkas di tingkat kernel sebelum diserahkan ke ClassLoader
+    int jar_fd = open(jar_path.c_str(), O_RDONLY);
+    if (jar_fd < 0) {
+        LOGE("vMeer ART: File %s tidak dapat dibaca secara fisik di VFS.", clean_jar_name.c_str());
+        return false;
+    }
+    close(jar_fd);
+
+    // 1. Dapatkan referensi dalvik.system.BaseDexClassLoader dan field pathList
     jclass loader_clazz = env->FindClass("dalvik/system/BaseDexClassLoader");
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
+    if (env->ExceptionCheck() || !loader_clazz) { 
+        env->ExceptionClear(); 
+        LOGE("vMeer ART: Gagal memuat kelas BaseDexClassLoader.");
+        return false; 
+    }
 
     jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
-    if (!path_list_fid) { LOGE("vMeer ART: Field pathList tidak ditemukan."); return false; }
+    if (!path_list_fid) { 
+        LOGE("vMeer ART: Field 'pathList' tidak ditemukan pada ClassLoader."); 
+        return false; 
+    }
 
     jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
-    if (!path_list_obj) { LOGE("vMeer ART: Objek pathList bernilai NULL."); return false; }
+    if (!path_list_obj) { 
+        LOGE("vMeer ART: Instance objek 'pathList' bernilai NULL."); 
+        return false; 
+    }
 
     jclass path_list_clazz = env->GetObjectClass(path_list_obj);
 
-    // 2. Ambil array dexElements lama yang terdaftar di host
+    // 2. Ambil struktur array dexElements lama yang sedang berjalan pada aplikasi host
     jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
-    if (!elements_fid) { LOGE("vMeer ART: Field dexElements tidak ditemukan."); return false; }
+    if (!elements_fid) { 
+        LOGE("vMeer ART: Field 'dexElements' sistem operasi tidak ditemukan."); 
+        return false; 
+    }
 
     jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
     jsize old_len = (old_elements != nullptr) ? env->GetArrayLength(old_elements) : 0;
 
-    // 3. Cari static method 'makePathElements' di dalam DexPathList milik sistem
+    // 3. Resolusi method pembuat elemen internal Android (Mendukung Android 9 hingga Android 15)
     jmethodID make_elements_mid = env->GetStaticMethodID(
         path_list_clazz, 
         "makePathElements", 
@@ -78,7 +129,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     if (!make_elements_mid) {
         env->ExceptionClear();
-        // Fallback untuk variasi internal signatur pada beberapa vendor ROM (makeDexElements)
+        // Fallback signature untuk beberapa modifikasi vendor ROM tertentu (makeDexElements)
         make_elements_mid = env->GetStaticMethodID(
             path_list_clazz, 
             "makeDexElements", 
@@ -87,11 +138,11 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     }
 
     if (!make_elements_mid) {
-        LOGE("vMeer ART: Gagal menemukan method pembuat elemen internal Android Runtime.");
+        LOGE("vMeer ART: Fatal - Gagal menemukan fungsi generator DexPathList$Element.");
         return false;
     }
 
-    // 4. Bungkus berkas .jar yang ditargetkan ke dalam java.util.ArrayList via JNI
+    // 4. Instansiasi berkas .jar ke dalam struktur java.util.ArrayList<File> via JNI
     jclass array_list_clazz = env->FindClass("java/util/ArrayList");
     jmethodID array_list_init = env->GetMethodID(array_list_clazz, "<init>", "()V");
     jmethodID array_list_add = env->GetMethodID(array_list_clazz, "add", "(Ljava/lang/Object;)Z");
@@ -106,7 +157,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     jobject suppressed_exceptions_list = env->NewObject(array_list_clazz, array_list_init);
 
-    // 5. Eksekusi pembuatan objek Element (ART akan membedah classes.dex di dalam berkas .jar secara murni)
+    // 5. Panggil fungsi pabrikasi elemen internal Android Runtime untuk mengurai berkas .jar virtual
     jobjectArray new_element_array = (jobjectArray)env->CallStaticObjectMethod(
         path_list_clazz, 
         make_elements_mid, 
@@ -117,7 +168,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     if (env->ExceptionCheck() || !new_element_array) {
         env->ExceptionClear();
-        LOGE("vMeer ART: Gagal mengurai dex internal dari berkas: %s", clean_jar_name.c_str());
+        LOGE("vMeer ART: Android Runtime menolak mengurai kode DEX di dalam berkas: %s", clean_jar_name.c_str());
         env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
         env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
         return false;
@@ -125,36 +176,35 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     jsize new_elements_len = env->GetArrayLength(new_element_array);
     if (new_elements_len == 0) {
-        LOGE("vMeer ART: Hasil dekapsulasi elemen %s bernilai 0. Berkas corrupt atau dilindungi.", clean_jar_name.c_str());
+        LOGE("vMeer ART: Hasil dekapsulasi elemen %s kosong. Berkas corrupt atau dilindungi W^X.", clean_jar_name.c_str());
         env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
         env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
         return false;
     }
 
-    // 6. Alokasikan array gabungan final (Host Elements + Guest Framework Elements)
+    // 6. Alokasikan array gabungan baru (Menggabungkan Lingkungan Host dan Lingkungan Tamu)
     jclass element_clazz = env->FindClass("dalvik/system/DexPathList$Element");
     jobjectArray combined_elements = env->NewObjectArray(old_len + new_elements_len, element_clazz, nullptr);
 
-    // Salin elemen aplikasi asli
+    // Salin elemen aplikasi host asli
     for (jsize i = 0; i < old_len; i++) {
         jobject element = env->GetObjectArrayElement(old_elements, i);
         env->SetObjectArrayElement(combined_elements, i, element);
         env->DeleteLocalRef(element);
     }
 
-    // Masukkan elemen baru dari virtual framework .jar hasil mount VFS
+    // Sisipkan elemen baru dari Guest OS virtual framework .jar hasil ekstraksi VFS
     for (jsize i = 0; i < new_elements_len; i++) {
         jobject element = env->GetObjectArrayElement(new_element_array, i);
         env->SetObjectArrayElement(combined_elements, old_len + i, element);
         env->DeleteLocalRef(element);
     }
 
-    // 7. Kunci kembali struktur array baru ke ClassLoader host agar refleksi sistem aktif
+    // 7. Kunci kembali struktur array baru ke dalam ClassLoader host aktif
     env->SetObjectField(path_list_obj, elements_fid, combined_elements);
-    LOGI("vMeer ART: SUCCESS! Elemen %s berhasil disisipkan. Total komponen aktif: %d", 
-          clean_jar_name.c_str(), old_len + new_elements_len);
+    LOGI("vMeer ART: INTEGRATION LIVE -> Komponen %s sukses disatukan ke runtime.", clean_jar_name.c_str());
 
-    // Bersihkan referensi lokal JNI
+    // Bersihkan seluruh referensi memori lokal JNI lokal untuk mencegah kebocoran tabel referensi
     env->DeleteLocalRef(j_path);
     env->DeleteLocalRef(files_list);
     env->DeleteLocalRef(file_obj);
@@ -167,27 +217,38 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 } // namespace vmeer
 
 // =============================================================================
-// GERBANG JNI & CROSS-MODULE SYMBOL EXPORT
+// GERBANG EKSPOR SIMBOL JNI (BRIDGING INTER-MODULE & JAVA LAYER)
 // =============================================================================
 
 extern "C" {
 
-// Ekspor fungsi C murni dengan visibilitas publik untuk menyelesaikan 'undefined symbol' di libvmeer_engine.so
+/**
+ * Ekspor simbol murni tingkat C (C-Binding) agar dapat diselesaikan secara dinamis 
+ * saat dipanggil menggunakan dlsym() atau pautan langsung dari 'libvmeer_engine.so'.
+ */
 __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path) {
-    if (path != nullptr) {
+    if (path != nullptr && env != nullptr) {
         vmeer::art::InjectMirrorFramework(env, class_loader, path);
     }
 }
 
-// Handler JNI Bridge untuk pemanggilan langsung dari sisi Java (EngineLoader)
+/**
+ * Handler JNI Bridge untuk pemicuan manual Hidden API Bypass langsung dari Java (EngineLoader.java)
+ */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
+    (void)clazz;
     vmeer::art::ApplyHiddenApiBypass(env);
 }
 
+/**
+ * Handler JNI Bridge untuk penyuntikan berkas .jar individual langsung dari Java (EngineLoader.java)
+ */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass clazz, jobject class_loader, jstring path) {
-    if (!path) return;
+    (void)clazz;
+    if (!path || !class_loader) return;
+    
     const char* native_path = env->GetStringUTFChars(path, nullptr);
     if (native_path) {
         vmeer::art::InjectMirrorFramework(env, class_loader, native_path);
