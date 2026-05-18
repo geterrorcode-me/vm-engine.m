@@ -16,13 +16,48 @@ public class EngineLoader {
     public static native void perform_mirror_injection(ClassLoader classLoader, String jarPath);
 
     /**
+     * Memastikan biner vmeerd ter-deploy dari assets ke internal storage privat aplikasi.
+     */
+    private static void deployDaemonFromAssets(Context context, File targetDaemonFile) {
+        // Buat folder induk (app_bin) jika belum tercipta
+        File parentDir = targetDaemonFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            parentDir.mkdirs();
+        }
+
+        // Ekstrak hanya jika berkas belum ada di internal storage
+        if (!targetDaemonFile.exists()) {
+            Log.i(TAG, "vMeer Bootstrap: Menggandakan biner vmeerd dari assets ke storage privat...");
+            try (InputStream in = context.getAssets().open("vmeer_bin/vmeerd");
+                 OutputStream out = new FileOutputStream(targetDaemonFile)) {
+                
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+                Log.i(TAG, "vMeer Bootstrap: Deployment vmeerd sukses.");
+                
+            } catch (IOException e) {
+                Log.e(TAG, "vMeer Bootstrap: CRITICAL! Gagal mengekstrak biner vmeerd: " + e.getMessage());
+                return;
+            }
+        }
+
+        // 🔥 PROTEKSI EKSEKUSI: Berikan hak akses Executable penuh (rwxr-xr-x)
+        if (targetDaemonFile.exists()) {
+            boolean isExecSet = targetDaemonFile.setExecutable(true, false);
+            Log.d(TAG, "vMeer Safety: Mengunci izin eksekusi vmeerd -> Status Executable: " + isExecSet);
+        }
+    }
+
+    /**
      * Mengekstrak berkas .jar pendukung dari assets ke dalam struktur folder VFS rootfs
-     * Serta mengunci berkas menjadi Read-Only guna membypass proteksi Android 15.
      */
     private static void extractFrameworkFromAssets(Context context, String targetDirPath) {
         File vfsFrameworkDir = new File(targetDirPath);
         
-        // Buat folder system/framework secara rekursif di dalam rootfs sandbox jika belum ada
         if (!vfsFrameworkDir.exists()) {
             boolean created = vfsFrameworkDir.mkdirs();
             Log.d(TAG, "vMeer Assets: Membuat struktur direktori VFS -> " + created);
@@ -39,7 +74,6 @@ public class EngineLoader {
         for (String jar : jarFiles) {
             File targetFile = new File(vfsFrameworkDir, jar);
             
-            // Ekstrak berkas dari assets jika belum tersedia secara fisik
             if (!targetFile.exists()) {
                 try (InputStream in = context.getAssets().open("vmeer_framework/" + jar);
                      OutputStream out = new FileOutputStream(targetFile)) {
@@ -54,7 +88,7 @@ public class EngineLoader {
                     
                 } catch (IOException e) {
                     Log.e(TAG, "vMeer Assets: Gagal mengekstrak komponen framework: " + jar + " -> " + e.getMessage());
-                    continue; // Lewati tahap penguncian jika berkas gagal disalin
+                    continue;
                 }
             }
 
@@ -74,41 +108,36 @@ public class EngineLoader {
      */
     private static String awakenDaemonProcess(Context context) {
         try {
-            // Deteksi lokasi dasar folder data aplikasi (/data/user/0/com.vmeer.io)
             String baseDataDir = context.getFilesDir().getParent();
             
-            // 🛠️ OPTIMASI LOGIK: Cek folder app_bin terlebih dahulu, jika kosong gunakan app_app_bin
+            // Tentukan jalur prioritas utama di /app_bin/vmeerd
             File daemonFile = new File(baseDataDir + "/app_bin/vmeerd");
-            if (!daemonFile.exists()) {
-                daemonFile = new File(baseDataDir + "/app_app_bin/vmeerd");
-            }
+            
+            // Jalankan sub-rutin deployment untuk memastikan eksistensi fisik berkas
+            deployDaemonFromAssets(context, daemonFile);
             
             if (daemonFile.exists()) {
-                // Berikan akses eksekusi penuh jika ter-reset otomatis oleh OS host
-                daemonFile.setExecutable(true, false);
-                
                 Log.i(TAG, "vMeer Bootstrap: Membangunkan native daemon vmeerd dari -> " + daemonFile.getAbsolutePath());
                 Runtime.getRuntime().exec(new String[]{daemonFile.getAbsolutePath()});
                 
                 // Beri jeda 350ms agar abstract socket server selesai melakukan bind() di kernel
                 Thread.sleep(350);
                 
-                // Kembalikan nama subfolder induk yang valid untuk penyelarasan VFS target
-                return daemonFile.getParentFile().getName();
+                return daemonFile.getParentFile().getName(); // Mengembalikan "app_bin"
             } else {
-                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd tidak ditemukan di struktur folder internal manapun.");
+                Log.w(TAG, "vMeer Bootstrap: File biner vmeerd tetap tidak ditemukan setelah fase force-deploy.");
             }
         } catch (Exception e) {
             Log.e(TAG, "vMeer Bootstrap: Gagal memicu eksekusi daemon: " + e.getMessage());
         }
-        return "app_app_bin"; // Fallback default jika terjadi anomali I/O
+        return "app_bin";
     }
 
     /**
      * Titik entri utama Lapisan 2 untuk menyatukan struktur Java Runtime Framework kontainer
      */
     public static void startFrameworkInjection(Context context, ClassLoader classLoader) {
-        // ⚡ LANGKAH PRE-BOOT 1: Bangunkan daemon dan dapatkan folder biner aktif secara real-time
+        // ⚡ LANGKAH PRE-BOOT 1: Deploy & Bangunkan daemon vmeerd
         String activeBinFolder = awakenDaemonProcess(context);
         
         // Sesuaikan target lokasi rootfs system framework berdasarkan folder aktif
@@ -128,7 +157,7 @@ public class EngineLoader {
 
         Log.i(TAG, "vMeer OS: Memulai Lapisan 2 - Runtime Framework Injection...");
 
-        // Jalankan bypass kebijakan hidden API internal Android 15
+        // Jalankan bypass kebijakan hidden API internal Android 15 jika library .so telah siap
         try {
             init_art_hook();
         } catch (Throwable t) {
