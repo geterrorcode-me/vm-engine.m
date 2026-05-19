@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include <android/log.h>
 #include <android/native_window.h>
+
+// Menyertakan header pendukung
 #include "include/egl_bridge.h"
 
 #define TAG "vMeer_EGL_Bridge"
@@ -73,12 +75,12 @@ void* vmeer_egl_render_worker(void* arg) {
     return nullptr;
 }
 
+// SINKRONISASI COUPLING: Menerima ANativeWindow* sesuai kebutuhan core engine
 extern "C" void start_egl_bridge(ANativeWindow* window) {
-    LOGI("[GPU] start_egl_bridge() dipanggil oleh Core Engine dengan ANativeWindow valid.");
+    LOGI("[GPU] start_egl_bridge() dipanggil oleh Core Engine.");
     apply_swiftshader_optimization();
     
     if (window != nullptr && !g_RenderRunning) {
-        // Ambil referensi window agar tidak terbebas di tengah jalan
         ANativeWindow_acquire(window);
         pthread_create(&g_RenderThread, nullptr, vmeer_egl_render_worker, window);
     }
