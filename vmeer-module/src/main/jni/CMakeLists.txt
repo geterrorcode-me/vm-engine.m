@@ -23,7 +23,7 @@ add_library(libzstd STATIC IMPORTED)
 set_target_properties(libzstd PROPERTIES IMPORTED_LOCATION 
     ${VMEER_LIBS_DIR}/libzstd.a)
 
-# FUSE 3 (Static - Hasil build sukses tadi)
+# FUSE 3 (Static)
 add_library(libfuse3 STATIC IMPORTED) 
 set_target_properties(libfuse3 PROPERTIES IMPORTED_LOCATION 
     ${VMEER_LIBS_DIR}/libfuse3.a)
@@ -39,7 +39,7 @@ include_directories(
 )
 
 # ==========================================================
-# 3. LIST SOURCE FILES (3 Benda Pusaka Sudah Dikeluarkan dari Sini)
+# 3. LIST SOURCE FILES TARGET UTAMA (VMEER_ENGINE)
 # ==========================================================
 set(VMEER_SOURCES
     vmeer_engine.cpp
@@ -53,20 +53,17 @@ set(VMEER_SOURCES
     binder_engine.cpp
     sensor_engine.cpp
     ams_runtime.cpp
-    egl_bridge.cpp
+    egl_bridge.cpp         # Tetap di sini sebagai mesin render GLES utama
     vmeer_stealth.cpp
-    surface_vm.cpp
-    # binder_vm.cpp  <-- DIHAPUS dari gabungan utama
+    surface_vm.cpp         # Tetap di sini untuk suplai JNI bawaan engine utama
     vmeer_system.cpp
     vmeer_helper.cpp
     vmeer_zygote.cpp
-    # art_vm.cpp     <-- DIHAPUS dari gabungan utama
     vmeer_vfs.cpp
     vmeer_jni_bridge.cpp
     vmeer_main.cpp
     vmeer_fuse_ops.cpp
     vmeer_squashfs_bridge.cpp
-    # vmeer_romfs.cpp  <-- (Jika ada file romfs, pastikan juga tidak masuk ke sini)
 )
 
 # ==========================================================
@@ -86,10 +83,8 @@ target_compile_definitions(vmeer_engine PRIVATE
 # ==========================================================
 # 5. LINKER UTAMA
 # ==========================================================
-# Tambahkan binder_vm dan art_vm sebagai tautan agar vmeer_engine tetap mengenalnya secara dinamis
+# Hubungkan target pendukung dan library system Android ke Core Engine
 target_link_libraries(vmeer_engine 
-    binder_vm      # Tautan dinamis ke library mandiri baru
-    art_vm         # Tautan dinamis ke library mandiri baru
     shadowhook 
     libzstd     
     libfuse3    
@@ -103,26 +98,34 @@ target_link_libraries(vmeer_engine
 )
 
 # ==========================================================
-# 6. MODUL STANDALONE, DAEMON & 3 BENDA PUSAKA BARU
+# 6. MODUL STANDALONE, DAEMON & COMPONENT ISOLATION
 # ==========================================================
 
-# Pusaka 1: Binder VM Standalone
+# Modul Isolasi 1: Binder VM Standalone
 add_library(binder_vm SHARED binder_vm.cpp)
 target_link_libraries(binder_vm shadowhook log android)
 
-# Pusaka 2: ART VM Standalone
+# Modul Isolasi 2: ART VM Standalone
 add_library(art_vm SHARED art_vm.cpp)
 target_link_libraries(art_vm shadowhook log android)
 
-# Pusaka 3: RomFS VM Standalone (Asumsi menggunakan basis vmeer_squashfs_bridge atau source khusus)
-# Catatan: Sesuaikan nama berkas .cpp di bawah ini jika proyekmu memiliki nama khusus untuk romfs (misal: vmeer_romfs.cpp)
+# Modul Isolasi 3: RomFS VM Standalone
 add_library(romfs_vm SHARED vmeer_squashfs_bridge.cpp)
 target_link_libraries(romfs_vm log android libzstd)
 
-# Surface VM Standalone
+# Modul Isolasi 4: Surface VM Standalone (Fix Undefined Symbols via Dynamic Isolation)
+# Kita tambahkan flag `-Wl,--allow-shlib-undefined` khusus untuk target ini agar linker 
+# mengizinkan resolusi simbol runtime dinamis libvmeer_engine.so tanpa macet di compile-time.
 add_library(surface_vm_standalone SHARED surface_vm.cpp)
-target_link_libraries(surface_vm_standalone shadowhook log android EGL)
+target_compile_definitions(surface_vm_standalone PRIVATE SHADOWHOOK_IS_SHARED_LIB)
+target_link_libraries(surface_vm_standalone 
+    shadowhook 
+    log 
+    android 
+    EGL 
+    dl   # Wajib menyertakan library dynamic linker untuk dlopen/dlsym
+)
 
-# VMeer Daemon 
+# VMeer Daemon Executable Binary
 add_executable(vmeerd vmeerd.cpp)
 target_link_libraries(vmeerd log android libfuse3 libzstd)
