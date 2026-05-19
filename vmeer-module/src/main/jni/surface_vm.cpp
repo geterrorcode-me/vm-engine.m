@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <android/native_window.h>
+#include <android/native_window_jni.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include "shadowhook.h"
@@ -11,39 +12,33 @@
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Definisi pointer fungsi asli
+// Rujukan ke thread render GLES di egl_bridge.cpp
+extern "C" void start_egl_bridge(ANativeWindow* window);
+extern "C" void stop_egl_bridge();
+
+// Definisi pointer fungsi asli libgui
 typedef int (*p_dequeue_buffer_t)(void* base, ANativeWindow_Buffer** buffer, int* fenceFd);
 static p_dequeue_buffer_t orig_dequeue = nullptr;
 
-// FUNGSI PROXY (Ganti Lambda ke fungsi statis untuk stabilitas casting)
 static int proxy_dequeue_buffer(void* base, ANativeWindow_Buffer** buffer, int* fenceFd) {
     if (orig_dequeue) {
-        // Panggil fungsi asli
         int result = orig_dequeue(base, buffer, fenceFd);
-        
-        // Logika monitoring frame bisa ditaruh di sini jika diperlukan
-        // LOGI("vMeer: DequeueBuffer Intercepted");
-        
+        // Interseptor produsen buffer aplikasi tamu aktif di sini jika dibutuhkan
         return result;
     }
     return -1;
 }
 
-// Bridge Function
 void start_graphics_proxy() {
-    LOGI("vMeer: Initializing Graphics Hook...");
+    LOGI("vMeer: Menghubungkan Jembatan Substitusi Grafis...");
     
-    // PERUBAHAN UTAMA: Ubah ke SHADOWHOOK_MODE_SHARED agar selaras dengan core engine
+    // Inisialisasi aman: SHADOWHOOK_MODE_SHARED agar berbagi resource dengan vmeer_engine
     int sh_status = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
-    
     if (sh_status != 0) {
-        // JANGAN LANGSUNG RETURN! Jika error code adalah tanda sudah di-init di tempat lain, 
-        // kita harus tetap melanjutkan proses hooking ke libgui.so.
-        LOGW("vMeer_Graphics: ShadowHook init returned %d (Mungkin sudah diaktifkan oleh vmeer_engine.cpp)", sh_status);
+        LOGW("vMeer_Graphics: ShadowHook shared instance terdeteksi (%d). Melanjutkan...", sh_status);
     }
 
-    // Hook dequeueBuffer di libgui.so
-    // Gunakan fungsi proxy_dequeue_buffer yang sudah didefinisikan di atas
+    // Mengunci simbol dequeueBuffer milik Android Surface Pipeline
     void* stub = shadowhook_hook_sym_name(
         "libgui.so",
         "_ZN7android7Surface13dequeueBufferEPP19ANativeWindowBufferPi",
@@ -52,15 +47,35 @@ void start_graphics_proxy() {
     );
     
     if (stub) {
-        LOGI("vMeer: Graphics Hook Matched (100%%)");
+        LOGI("vMeer: Jembatan Substitusi Grafis Terkunci (100%%)");
     } else {
         int err_num = shadowhook_get_errno();
-        LOGE("vMeer: Graphics Hook FAILED to match libgui symbol! Error: %s", shadowhook_to_errmsg(err_num));
+        LOGE("vMeer: Gagal intercept libgui! Error: %s", shadowhook_to_errmsg(err_num));
     }
 }
 
+// SINKRONISASI JNI: Disesuaikan dengan package com.vmeer.io di /vMeerOS Anda
 extern "C" JNIEXPORT void JNICALL 
 Java_com_vmeer_io_GraphicsEngine_nativeInit(JNIEnv* env, jobject thiz) {
     (void)env; (void)thiz;
     start_graphics_proxy();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_vmeer_io_GraphicsEngine_nativeSurfaceCreated(JNIEnv* env, jobject thiz, jobject surface) {
+    (void)thiz;
+    if (surface != nullptr) {
+        ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+        if (window != nullptr) {
+            // Jalankan EGL Render Loop mandiri untuk mengusir Layar Hitam Dashboard
+            start_egl_bridge(window);
+        }
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_vmeer_io_GraphicsEngine_nativeSurfaceDestroyed(JNIEnv* env, jobject thiz) {
+    (void)thiz;
+    // Matikan thread rendering GLES saat aplikasi masuk ke background
+    stop_egl_bridge();
 }
