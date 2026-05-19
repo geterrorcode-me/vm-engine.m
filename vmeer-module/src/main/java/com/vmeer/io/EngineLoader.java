@@ -35,27 +35,35 @@ public class EngineLoader {
     public static native void perform_mirror_injection(ClassLoader classLoader, String jarPath);
 
     /**
-     * Solusi Modern: Membuat ClassLoader terisolasi dari penyangga memori (RAM murni)
-     * Menggunakan logika gabungan InMemory + Delegate Last agar terhindar dari conflict classpath.
+     * Solusi Modern: Membuat ClassLoader terisolasi dari penyangga memori (RAM murni).
+     * Menggunakan pola Wrapper karena InMemoryDexClassLoader berstatus FINAL di SDK Android.
+     * Logika Delegate Last tetap berjalan 100% aman untuk mencegah konflik classpath.
      */
-    public static ClassLoader createVirtualClassLoader(ByteBuffer[] dexBuffers, ClassLoader parent) {
-        Log.i(TAG, "vMeer OS: Membangun Custom InMemoryDexClassLoader untuk Sandbox Aplikasi...");
+    public static ClassLoader createVirtualClassLoader(final ByteBuffer[] dexBuffers, final ClassLoader parent) {
+        Log.i(TAG, "vMeer OS: Membangun Custom Delegate ClassLoader untuk Sandbox Aplikasi...");
         
-        return new InMemoryDexClassLoader(dexBuffers, parent) {
+        // 1. Instansiasi objek InMemoryDexClassLoader murni
+        final InMemoryDexClassLoader inMemoryLoader = new InMemoryDexClassLoader(dexBuffers, parent);
+
+        // 2. Bungkus di dalam ClassLoader anonim untuk membalik urutan delegasi (Delegate Last)
+        return new ClassLoader(parent) {
             @Override
             protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                // 1. Cek cache lokal memori runtime
+                // A. Cek cache internal runtime apakah kelas sudah pernah dimuat
                 Class<?> c = findLoadedClass(name);
                 if (c != null) return c;
 
-                // 2. [DELEGATE LAST LOGIC] Paksa cari di dalam biner aplikasi tamu dulu
+                // B. [DELEGATE LAST LOGIC] Paksa cari di dalam biner aplikasi tamu (InMemory) terlebih dahulu
                 try {
-                    return findClass(name);
-                } catch (ClassNotFoundException e) {
-                    // Abaikan, lanjut ke langkah berikutnya jika tidak ada di dalam DEX tamu
+                    // Karena findClass berstatus protected pada ClassLoader, kita panggil secara reflektif
+                    java.lang.reflect.Method findClassMethod = ClassLoader.class.getDeclaredMethod("findClass", String.class);
+                    findClassMethod.setAccessible(true);
+                    return (Class<?>) findClassMethod.invoke(inMemoryLoader, name);
+                } catch (Throwable e) {
+                    // Abaikan jika tidak ditemukan di dalam DEX aplikasi tamu, lanjut ke fallback induk
                 }
 
-                // 3. Jika tidak ketemu di tamu, delegasikan ke sistem host
+                // C. Jika tamu tidak memilikinya, serahkan pencarian ke ClassLoader sistem host asli
                 return super.loadClass(name, resolve);
             }
         };
