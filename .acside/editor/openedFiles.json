@@ -20,12 +20,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 12298,
+          "index": 11434,
           "line": 275
         },
         "start": {
           "column": 0,
-          "index": 12298,
+          "index": 11434,
           "line": 275
         }
       }
@@ -46,5 +46,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp"
 }
