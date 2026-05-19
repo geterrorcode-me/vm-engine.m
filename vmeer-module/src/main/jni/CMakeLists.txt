@@ -9,15 +9,15 @@ set(SHADOWHOOK_DIR ${JNI_SRC_DIR}/3rdparty/shadowhook)
 set(VMEER_LIBS_DIR ${JNI_SRC_DIR}/libs/${ANDROID_ABI})
 
 # ==========================================================
-# 1. REGISTER NDK SYSTEM LIBRARIES (Memicu Auto-Inject Sysroot)
+# 1. REGISTER NDK SYSTEM LIBRARIES
 # ==========================================================
 find_library(LOG_LIB log)
 find_library(ANDROID_LIB android)
 find_library(EGL_LIB EGL)
-find_library(GLESV2_LIB GLESv2) # Ini akan mengaktifkan path <GLES2/gl2.h>
+find_library(GLESV2_LIB GLESv2)
 
 # ==========================================================
-# 2. DEFINISI LIBRARY IMPORT (THIRD PARTY)
+# 2. DEFINISI LIBRARY IMPORT
 # ==========================================================
 add_library(shadowhook SHARED IMPORTED)
 set_target_properties(shadowhook PROPERTIES IMPORTED_LOCATION 
@@ -67,10 +67,11 @@ set(VMEER_SOURCES
     vmeer_main.cpp
     vmeer_fuse_ops.cpp
     vmeer_squashfs_bridge.cpp
+    binder_vm.cpp          # FIX UTAMA: Ditambahkan ke sini agar vmeer_engine mengenal fungsi binder!
 )
 
 # ==========================================================
-# 5. BUILD TARGET UTAMA & LINKING VIA VARIABLE NDK
+# 5. BUILD TARGET UTAMA
 # ==========================================================
 add_library(vmeer_engine SHARED ${VMEER_SOURCES})
 
@@ -99,6 +100,8 @@ target_link_libraries(vmeer_engine
 # ==========================================================
 # 6. MODUL STANDALONE, DAEMON & COMPONENT ISOLATION
 # ==========================================================
+
+# Modul Standalone Binder tetap diizinkan terkompilasi mandiri
 add_library(binder_vm SHARED binder_vm.cpp)
 target_link_libraries(binder_vm shadowhook ${LOG_LIB} ${ANDROID_LIB})
 
@@ -108,7 +111,7 @@ target_link_libraries(art_vm shadowhook ${LOG_LIB} ${ANDROID_LIB})
 add_library(romfs_vm SHARED vmeer_squashfs_bridge.cpp)
 target_link_libraries(romfs_vm ${LOG_LIB} ${ANDROID_LIB} libzstd)
 
-# Modul Isolasi Grafis Standalone
+# Modul Standalone Surface Graphics
 add_library(surface_vm_standalone SHARED surface_vm.cpp)
 target_compile_definitions(surface_vm_standalone PRIVATE SHADOWHOOK_IS_SHARED_LIB)
 set_target_properties(surface_vm_standalone PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined")
@@ -120,6 +123,6 @@ target_link_libraries(surface_vm_standalone
     dl   
 )
 
-# VMeer Daemon Binary
+# VMeer Daemon Executable
 add_executable(vmeerd vmeerd.cpp)
 target_link_libraries(vmeerd ${LOG_LIB} ${ANDROID_LIB} libfuse3 libzstd)
