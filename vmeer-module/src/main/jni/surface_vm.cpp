@@ -15,11 +15,14 @@
 typedef void (*fn_start_egl_bridge)(ANativeWindow*);
 typedef void (*fn_stop_egl_bridge)();
 
-// Pointer fungsi asli untuk monitoring libgui
-typedef int (*p_dequeue_buffer_t)(void* base, ANativeWindow_Buffer** buffer, int* fenceFd);
+// Pointer fungsi asli untuk monitoring libgui (Menggunakan void** agar aman di lintas versi Android NDK)
+typedef int (*p_dequeue_buffer_t)(void* base, void** buffer, int* fenceFd);
 static p_dequeue_buffer_t orig_dequeue = nullptr;
 
-static int proxy_dequeue_buffer(void* base, ANativeWindow_Buffer** buffer, int* fenceFd) {
+/**
+ * Proxy interceptor untuk melacak alokasi buffer grafis dari aplikasi tamu.
+ */
+static int proxy_dequeue_buffer(void* base, void** buffer, int* fenceFd) {
     if (orig_dequeue) {
         return orig_dequeue(base, buffer, fenceFd);
     }
@@ -28,13 +31,13 @@ static int proxy_dequeue_buffer(void* base, ANativeWindow_Buffer** buffer, int* 
 
 /**
  * Jembatan Pintar Dinamis: Menghubungkan Surface dengan Thread EGL
- * tanpa menciptakan dependensi link-time yang merusak modul standalone.
+ * tanpa menciptakan dependensi link-time fisik yang merusak modul standalone.
  */
 static void dispatch_to_egl_bridge(ANativeWindow* window, bool trigger_start) {
     // Cari handle memori libvmeer_engine.so di mana tempat egl_bridge.cpp terkompilasi
     void* handle = dlopen("libvmeer_engine.so", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
-        LOGW("[Graphics Gate] Berjalan dalam mode mandiri tipis. Melewati proses render loop GLES.");
+        LOGW("[Graphics Gate] Berjalan dalam mode mandiri (standalone). Melewati proses render loop GLES.");
         return;
     }
 
@@ -54,12 +57,16 @@ static void dispatch_to_egl_bridge(ANativeWindow* window, bool trigger_start) {
     dlclose(handle);
 }
 
-void start_graphics_proxy() {
+/**
+ * Mengunci hook interceptor ke subsistem grafis internal Android (libgui.so)
+ */
+extern "C" void start_graphics_proxy() {
     int sh_status = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
     if (sh_status != 0) {
         LOGW("vMeer Graphics: ShadowHook shared instance terdeteksi (%d). Melanjutkan...", sh_status);
     }
 
+    // Melakukan hooking ke Symbol Dequeue Buffer milik libgui.so Android
     void* stub = shadowhook_hook_sym_name(
         "libgui.so",
         "_ZN7android7Surface13dequeueBufferEPP19ANativeWindowBufferPi",
@@ -68,7 +75,9 @@ void start_graphics_proxy() {
     );
     
     if (stub) {
-        LOGI("vMeer Graphics: Monitoring Hook libgui.so Berhasil Dipasang.");
+        LOGI("vMeer Graphics: Subsistem Monitoring Hook libgui.so Berhasil Dipasang.");
+    } else {
+        LOGW("vMeer Graphics: Simbol libgui tidak terkunci. Berjalan dalam mode grafis standar.");
     }
 }
 
