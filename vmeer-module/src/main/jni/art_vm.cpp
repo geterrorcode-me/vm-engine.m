@@ -6,56 +6,70 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include "shadowhook.h"
 
 #define LOG_TAG "vMeer_ART"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+// Pointer untuk menyimpan alamat fungsi asli libart.so yang ditangkap ShadowHook
+static bool (*orig_ShouldBlockAccessToMember_11_14)(void*, void*, int, int) = nullptr;
+static bool (*orig_ShouldBlockAccessToMember_15)(void*, void*, int, int, bool) = nullptr;
+
+/**
+ * Proxy Hook untuk Android 11 hingga Android 14
+ * Mengembalikan false secara mutlak = Akses Hidden API tidak pernah diblokir.
+ */
+static bool proxy_ShouldBlockAccessToMember_11_14(void* member, void* ctx, int access_ctx, int access_method) {
+    (void)member; (void)ctx; (void)access_ctx; (void)access_method;
+    return false; 
+}
+
+/**
+ * Proxy Hook khusus Android 15 (Menyesuaikan parameter enkapsulasi baru ART)
+ */
+static bool proxy_ShouldBlockAccessToMember_15(void* member, void* ctx, int access_ctx, int access_method, bool v) {
+    (void)member; (void)ctx; (void)access_ctx; (void)access_method; (void)v;
+    return false;
+}
+
 namespace vmeer {
 namespace art {
 
 /**
- * Mem-bypass kebijakan Hidden API Policy pada Android 9 hingga Android 15.
- * Menggunakan refleksi tingkat internal untuk membebaskan pengecualian (exemptions)
- * sehingga komponen VM dapat memanggil API tersembunyi milik sistem host tanpa diblokir.
+ * ARSITEKTUR BARU: Menggunakan ShadowHook untuk memotong Hidden API Enforcement Policy
+ * langsung di dalam struktur biner memory ruang kerja libart.so.
  */
-void ApplyHiddenApiBypass(JNIEnv* env) {
-    LOGI("vMeer ART: Menginisialisasi Hidden API Bypass...");
-    
-    jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
-    if (!vm_runtime_clazz) {
-        LOGE("vMeer ART: Gagal menemukan kelas dalvik.system.VMRuntime");
+void ApplyNativeHiddenApiBypass() {
+    LOGI("vMeer ART: Memulai operasi Global Native Hook Bypass (Style: LSPosed/KernelSU)...");
+
+    // 1. Coba pasang hook menggunakan pencarian simbol wildcard untuk Android 11 - 14
+    void* hook_11_14 = shadowhook_hook_sym_name(
+        "libart.so",
+        "_ZN3art9hiddenapi25ShouldBlockAccessToMember*", 
+        reinterpret_cast<void*>(proxy_ShouldBlockAccessToMember_11_14),
+        reinterpret_cast<void**>(&orig_ShouldBlockAccessToMember_11_14)
+    );
+
+    if (hook_11_14 != nullptr) {
+        LOGI("vMeer ART: SUCCESS - Global Native Bypass aktif untuk Android 11-14.");
         return;
     }
 
-    jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    if (!get_runtime_mid) {
-        LOGE("vMeer ART: Gagal menemukan method static VMRuntime.getRuntime()");
-        return;
-    }
-    
-    jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
-    if (!vm_runtime_obj) {
-        LOGE("vMeer ART: Objek VMRuntime bernilai NULL.");
-        return;
-    }
+    // 2. Jika gagal (kemungkinan Android 15), coba pasang hook ke simbol internal Android 15 terbaru
+    void* hook_15 = shadowhook_hook_sym_name(
+        "libart.so",
+        "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImpl*", 
+        reinterpret_cast<void*>(proxy_ShouldBlockAccessToMember_15),
+        reinterpret_cast<void**>(&orig_ShouldBlockAccessToMember_15)
+    );
 
-    jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
-    if (!set_exemptions_mid) {
-        LOGE("vMeer ART: Gagal menemukan method setHiddenApiExemptions()");
-        return;
-    }
-    
-    // Memberikan pengecualian string "L" untuk membebaskan seluruh struktur paket API internal Android
-    jobjectArray str_array = env->NewObjectArray(1, env->FindClass("java/lang/String"), env->NewStringUTF("L"));
-    env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
-
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Eksekusi Hidden API Bypass ditolak oleh runtime Android 15.");
+    if (hook_15 != nullptr) {
+        LOGI("vMeer ART: SUCCESS - Global Native Bypass aktif untuk Android 15.");
     } else {
-        LOGI("vMeer ART: SUCCESS - Kebijakan Hidden API berhasil dilonggarkan.");
+        int err = shadowhook_get_errno();
+        LOGE("vMeer ART: CRITICAL - Gagal memotong kebijakan ART! Error: %s", shadowhook_to_errmsg(err));
     }
 }
 
@@ -73,7 +87,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     // Ambil nama file bersih untuk mempermudah pelacakan debugging logcat
     std::string clean_jar_name = jar_path.substr(jar_path.find_last_of("/\\") + 1);
-    LOGI("vMeer ART: Menjadwalkan penggabungan classpath -> %s", clean_jar_name.c_str());
+    [span_2](start_span)[span_3](start_span)[span_4](start_span)[span_5](start_span)[span_6](start_span)[span_7](start_span)[span_8](start_span)[span_9](start_span)[span_10](start_span)[span_11](start_span)LOGI("vMeer ART: Menjadwalkan penggabungan classpath -> %s", clean_jar_name.c_str());[span_2](end_span)[span_3](end_span)[span_4](end_span)[span_5](end_span)[span_6](end_span)[span_7](end_span)[span_8](end_span)[span_9](end_span)[span_10](end_span)[span_11](end_span)
 
     if (class_loader == nullptr) {
         LOGE("vMeer ART: Operasi dibatalkan, ClassLoader host bernilai NULL!");
@@ -96,7 +110,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
         return false; 
     }
 
-    jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
+    [span_12](start_span)jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");[span_12](end_span)
     if (!path_list_fid) { 
         LOGE("vMeer ART: Field 'pathList' tidak ditemukan pada ClassLoader."); 
         return false; 
@@ -111,7 +125,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
     jclass path_list_clazz = env->GetObjectClass(path_list_obj);
 
     // 2. Ambil struktur array dexElements lama yang sedang berjalan pada aplikasi host
-    jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
+    [span_13](start_span)jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");[span_13](end_span)
     if (!elements_fid) { 
         LOGE("vMeer ART: Field 'dexElements' sistem operasi tidak ditemukan."); 
         return false; 
@@ -202,7 +216,7 @@ bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string&
 
     // 7. Kunci kembali struktur array baru ke dalam ClassLoader host aktif
     env->SetObjectField(path_list_obj, elements_fid, combined_elements);
-    LOGI("vMeer ART: INTEGRATION LIVE -> Komponen %s sukses disatukan ke runtime.", clean_jar_name.c_str());
+    [span_14](start_span)[span_15](start_span)[span_16](start_span)[span_17](start_span)[span_18](start_span)[span_19](start_span)[span_20](start_span)[span_21](start_span)[span_22](start_span)[span_23](start_span)LOGI("vMeer ART: INTEGRATION LIVE -> Komponen %s sukses disatukan ke runtime.", clean_jar_name.c_str());[span_14](end_span)[span_15](end_span)[span_16](end_span)[span_17](end_span)[span_18](end_span)[span_19](end_span)[span_20](end_span)[span_21](end_span)[span_22](end_span)[span_23](end_span)
 
     // Bersihkan seluruh referensi memori lokal JNI lokal untuk mencegah kebocoran tabel referensi
     env->DeleteLocalRef(j_path);
@@ -233,12 +247,14 @@ __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env
 }
 
 /**
- * Handler JNI Bridge untuk pemicuan manual Hidden API Bypass langsung dari Java (EngineLoader.java)
+ * REFACTOR: Handler JNI Bridge kini mengeksekusi Native Hook 
+ * alih-alih Java Reflection VMRuntime yang terdeteksi/gagal di Android 15.
  */
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
+    (void)env;
     (void)clazz;
-    vmeer::art::ApplyHiddenApiBypass(env);
+    vmeer::art::ApplyNativeHiddenApiBypass();
 }
 
 /**
