@@ -29,7 +29,22 @@
           "line": 275
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 4352,
+          "line": 138
+        },
+        "start": {
+          "column": 0,
+          "index": 4352,
+          "line": 138
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/art_vm.cpp"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/CMakeLists.txt"
 }

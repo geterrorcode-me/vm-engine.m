@@ -67,7 +67,7 @@ set(VMEER_SOURCES
     vmeer_main.cpp
     vmeer_fuse_ops.cpp
     vmeer_squashfs_bridge.cpp
-    binder_vm.cpp          # FIX UTAMA: Ditambahkan ke sini agar vmeer_engine mengenal fungsi binder!
+    binder_vm.cpp          # Menyatukan binder logic ke engine utama
 )
 
 # ==========================================================
@@ -101,13 +101,23 @@ target_link_libraries(vmeer_engine
 # 6. MODUL STANDALONE, DAEMON & COMPONENT ISOLATION
 # ==========================================================
 
-# Modul Standalone Binder tetap diizinkan terkompilasi mandiri
+# Modul Standalone Binder
 add_library(binder_vm SHARED binder_vm.cpp)
+target_compile_definitions(binder_vm PRIVATE SHADOWHOOK_IS_SHARED_LIB)
+set_target_properties(binder_vm PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined")
 target_link_libraries(binder_vm shadowhook ${LOG_LIB} ${ANDROID_LIB})
 
+# FIX MUTLAK: Modul Standalone ART (Bypass Native Hook)
 add_library(art_vm SHARED art_vm.cpp)
-target_link_libraries(art_vm shadowhook ${LOG_LIB} ${ANDROID_LIB})
+target_compile_definitions(art_vm PRIVATE SHADOWHOOK_IS_SHARED_LIB) # Memaksa header memuat simbol shared (.so)
+set_target_properties(art_vm PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined") # Mengizinkan dynamic resolution runtime
+target_link_libraries(art_vm 
+    shadowhook 
+    ${LOG_LIB} 
+    ${ANDROID_LIB}
+)
 
+# Modul Standalone RomFS Virtualization
 add_library(romfs_vm SHARED vmeer_squashfs_bridge.cpp)
 target_link_libraries(romfs_vm ${LOG_LIB} ${ANDROID_LIB} libzstd)
 
