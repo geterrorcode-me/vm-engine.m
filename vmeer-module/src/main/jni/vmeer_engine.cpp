@@ -230,7 +230,10 @@ Java_com_vmeer_io_VMeerEngine_setupVM(JNIEnv *env, jclass clazz, jobject context
     }
     
     LOGI("vMeer_Engine: [TRACER 7] Masuk ke syncJavaProperties...");
-    syncJavaProperties(env);
+    
+    // 🔥 BYPASS ANDROID 15 CRASH: Fungsi eksternal di bawah ini dinonaktifkan sementara
+    // syncJavaProperties(env);
+    LOGW("vMeer_Engine: [SAFEGUARD] syncJavaProperties dilewati secara lokal untuk stabilitas Android 15.");
 
     env->ReleaseStringUTFChars(mirrorPath, path);
     LOGI("vMeer Engine: VM Setup for vUID %d is LIVE.", vUid);
