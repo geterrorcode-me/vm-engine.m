@@ -14,7 +14,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // ====================================================================
-// SOLUSI FIX: ISOLASI DEKLARASI EKSTERNAL (Membungkam Error Header Lama)
+// DEKLARASI EKSTERNAL (Membungkam Error Header Lama)
 // ====================================================================
 extern "C" {
     // 1. Fungsi dari binder_rewriter.cpp / binder_vm.cpp
@@ -25,12 +25,6 @@ extern "C" {
     
     // 3. Fungsi bawaan internal vMeer System Services
     void start_virtual_system_services(); 
-    
-    // 4. Sinkronisasi murni dengan implementasi baru di egl_bridge.cpp
-    // Mendeklarasikan start_egl_bridge dengan 1 argumen (ANativeWindow*) 
-    // dan stop_egl_bridge() agar dikenali 100% oleh kompiler clang.
-    void start_egl_bridge(ANativeWindow* window);
-    void stop_egl_bridge();
 }
 
 // ====================================================================
@@ -44,7 +38,7 @@ static bool (*orig_ShouldBlockAccessToMember)(void*, void*, int, int) = nullptr;
  * Mengembalikan nilai 'false' secara paksa agar semua Hidden API terbuka untuk Guest OS.
  */
 bool hook_ShouldBlockAccessToMember(void* member, void* ctx, int access_ctx, int access_method) {
-    (void)member; (void)ctx; (void)access_ctx; (void)access_method;
+    (void)member; (void)ctx; (void)access_ctx; (access_method);
     return false; 
 }
 
@@ -97,38 +91,4 @@ Java_com_vmeer_io_VMeerCore_nativeLaunch(JNIEnv *env, jobject thiz) {
     start_graphics_proxy();
 
     LOGI("vMeer: === All Native Core Systems Operational & Invisible ===");
-}
-
-// ====================================================================
-// JNI INTERACTION 2: PIPELINE GRAFIS (GRAPHICSENGINE.JAVA)
-// ====================================================================
-/**
- * Menerima pelimpahan objek permukaan (Surface View) dari UI dashboard Java.
- * Mengonversinya menjadi objek native window dan mengirimkannya ke thread rendering EGL.
- */
-extern "C" JNIEXPORT void JNICALL
-Java_com_vmeer_io_GraphicsEngine_nativeSurfaceCreated(JNIEnv* env, jobject thiz, jobject surface) {
-    (void)thiz;
-    if (surface != nullptr) {
-        // Konversi objek Surface Java ke pointer struktur ANativeWindow C++ secara legal
-        ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
-        if (window != nullptr) {
-            LOGI("[Core Graphics] Mengikat Surface ke Pipeline GLES Render Loop...");
-            // Memicu pembuatan EGLContext & loop eglSwapBuffers (Menghilangkan Layar Hitam)
-            start_egl_bridge(window);
-        } else {
-            LOGE("[Core Graphics] Gagal melakukan konversi Java Surface ke ANativeWindow!");
-        }
-    }
-}
-
-/**
- * Menghentikan siklus kerja thread rendering secara aman ketika SurfaceView dihancurkan host.
- */
-extern "C" JNIEXPORT void JNICALL
-Java_com_vmeer_io_GraphicsEngine_nativeSurfaceDestroyed(JNIEnv* env, jobject thiz) {
-    (void)env; (void)thiz;
-    LOGI("[Core Graphics] Surface dihancurkan. Menghentikan thread pekerja render GLES...");
-    // Menghentikan loop eglSwapBuffers di egl_bridge
-    stop_egl_bridge();
 }

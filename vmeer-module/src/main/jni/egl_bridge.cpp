@@ -1,99 +1,95 @@
 #include <EGL/egl.h>
-#include <GLES2/gl2.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <android/log.h>
+#include <GLESv2/gl2.h>
 #include <android/native_window.h>
+#include <android/log.h>
+#include <pthread.h>
 
-// Menyertakan header pendukung
-#include "include/egl_bridge.h"
+#define LOG_TAG "vMeer_EGLBridge"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-#define TAG "vMeer_EGL_Bridge"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+static pthread_t render_thread;
+static ANativeWindow* g_window = nullptr;
+static bool is_rendering = false;
 
-static EGLDisplay g_EglDisplay = EGL_NO_DISPLAY;
-static EGLSurface g_EglSurface = EGL_NO_SURFACE;
-static EGLContext g_EglContext = EGL_NO_CONTEXT;
-static bool g_RenderRunning = false;
-static pthread_t g_RenderThread;
+// Driver EGL Handles
+static EGLDisplay display = EGL_NO_DISPLAY;
+static EGLContext context = EGL_NO_CONTEXT;
+static EGLSurface surface = EGL_NO_SURFACE;
 
-void apply_swiftshader_optimization() {
-    LOGI("[GPU] Memaksa konfigurasi SwiftShader Multi-Threaded (+40%% FPS)...");
-    setenv("SWIFTSHADER_CPU_NUM_CORES", "8", 1);
-    setenv("SWIFTSHADER_DISABLE_AHEAD_OF_TIME_COMPILE", "0", 1);
-    setenv("SWIFTSHADER_FAST_MATH", "1", 1);
-}
+/**
+ * Thread pekerja GLES Loop untuk menstabilkan render screen Guest OS
+ */
+static void* egl_render_loop(void* arg) {
+    (void)arg;
+    LOGI("[EGL Thread] Memulai siklus inisialisasi hardware display...");
+    
+    display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    eglInitialize(display, nullptr, nullptr);
 
-// Thread Worker Pipeline Grafis Virtual untuk menyingkirkan Layar Hitam
-void* vmeer_egl_render_worker(void* arg) {
-    ANativeWindow* window = (ANativeWindow*)arg;
-    LOGI("[GPU] Pipeline Render Worker Aktif.");
-
-    g_EglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    eglInitialize(g_EglDisplay, nullptr, nullptr);
-
-    EGLint configAttribs[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+    EGLint attribs[] = {
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_BLUE_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_RED_SIZE, 8, EGL_ALPHA_SIZE, 8,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_BLUE_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_RED_SIZE, 8,
         EGL_NONE
     };
+
     EGLConfig config;
-    EGLint numConfigs;
-    eglChooseConfig(g_EglDisplay, configAttribs, &config, 1, &numConfigs);
+    EGLint num_configs;
+    eglChooseConfig(display, attribs, &config, 1, &num_configs);
 
-    EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
-    g_EglContext = eglCreateContext(g_EglDisplay, config, EGL_NO_CONTEXT, contextAttribs);
-    g_EglSurface = eglCreateWindowSurface(g_EglDisplay, config, window, nullptr);
+    EGLint context_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+    context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribs);
+    surface = eglCreateWindowSurface(display, config, g_window, nullptr);
 
-    if (!eglMakeCurrent(g_EglDisplay, g_EglSurface, g_EglSurface, g_EglContext)) {
-        LOGE("[GPU] Gagal mengikat EGLContext ke rendering thread!");
+    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
+        LOGE("[EGL Thread] Gagal mengikat EGL Context ke Native Window!");
         return nullptr;
     }
 
-    g_RenderRunning = true;
-    while (g_RenderRunning) {
-        // Render Canvas Sandbox (Warna Abu-Abu Gelap Penanda Kontainer Aktif)
-        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+    LOGI("[EGL Thread] Hardware virtual berhasil dikunci. Memulai loop penumpas layar hitam.");
+    is_rendering = true;
 
-        // Paksa dorong frame buffer ke SurfaceFlinger asli Android Host
-        if (!eglSwapBuffers(g_EglDisplay, g_EglSurface)) {
-            LOGE("[GPU] eglSwapBuffers tersendat!");
-        }
-        usleep(16666); // Lock di ~60 FPS para-virtualisasi
+    while (is_rendering) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Bersihkan dengan warna hitam solid standar engine
+        glClear(GL_COLOR_BUFFER_BIT);
+        
+        eglSwapBuffers(display, surface);
+        
+        // Batasi frame-rate agar tidak memakan siklus CPU secara berlebihan
+        usleep(16666); // Rentang waktu stabil ~60 FPS
     }
 
-    // Cleanup
-    eglMakeCurrent(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext(g_EglDisplay, g_EglContext);
-    eglDestroySurface(g_EglDisplay, g_EglSurface);
-    eglTerminate(g_EglDisplay);
-    ANativeWindow_release(window);
+    // Pembersihan resource saat thread dimatikan
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroySurface(display, surface);
+    eglDestroyContext(display, context);
+    eglTerminate(display);
+    
+    LOGI("[EGL Thread] Pipeline render dihentikan secara aman.");
     return nullptr;
 }
 
-// SINKRONISASI COUPLING: Menerima ANativeWindow* sesuai kebutuhan core engine
-extern "C" void start_egl_bridge(ANativeWindow* window) {
-    LOGI("[GPU] start_egl_bridge() dipanggil oleh Core Engine.");
-    apply_swiftshader_optimization();
-    
-    if (window != nullptr && !g_RenderRunning) {
-        ANativeWindow_acquire(window);
-        pthread_create(&g_RenderThread, nullptr, vmeer_egl_render_worker, window);
-    }
+extern "C" {
+
+void start_egl_bridge(ANativeWindow* window) {
+    if (window == nullptr) return;
+    g_window = window;
+    ANativeWindow_acquire(g_window);
+    pthread_create(&render_thread, nullptr, egl_render_loop, nullptr);
 }
 
-extern "C" void stop_egl_bridge() {
-    if (g_RenderRunning) {
-        g_RenderRunning = false;
-        pthread_join(g_RenderThread, nullptr);
-        LOGI("[GPU] Pipeline Render Worker Dihentikan.");
+void stop_egl_bridge() {
+    is_rendering = false;
+    pthread_join(render_thread, nullptr);
+    if (g_window != nullptr) {
+        ANativeWindow_release(g_window);
+        g_window = nullptr;
     }
 }
 
 EGLDisplay vmeer_eglGetDisplay(EGLNativeDisplayType display_id) {
     return eglGetDisplay(display_id);
+}
+
 }

@@ -44,7 +44,7 @@ include_directories(
 set(VMEER_SOURCES
     vmeer_engine.cpp
     vmeer_jni.cpp
-    vmeer_core.cpp
+    vmeer_core.cpp         # Bersih dari duplikasi simbol JNI grafis
     vmeer_context.cpp
     vmeer_db.cpp
     ${JNI_SRC_DIR}/sqlite3.c
@@ -53,9 +53,9 @@ set(VMEER_SOURCES
     binder_engine.cpp
     sensor_engine.cpp
     ams_runtime.cpp
-    egl_bridge.cpp         # Tetap di sini sebagai mesin render GLES utama
+    egl_bridge.cpp         # Mesin render utama vMeerOS
     vmeer_stealth.cpp
-    surface_vm.cpp         # Tetap di sini untuk suplai JNI bawaan engine utama
+    surface_vm.cpp         # Satu-satunya pemilik fungsi JNI GraphicsEngine yang sah
     vmeer_system.cpp
     vmeer_helper.cpp
     vmeer_zygote.cpp
@@ -83,7 +83,6 @@ target_compile_definitions(vmeer_engine PRIVATE
 # ==========================================================
 # 5. LINKER UTAMA
 # ==========================================================
-# Hubungkan target pendukung dan library system Android ke Core Engine
 target_link_libraries(vmeer_engine 
     shadowhook 
     libzstd     
@@ -114,16 +113,15 @@ add_library(romfs_vm SHARED vmeer_squashfs_bridge.cpp)
 target_link_libraries(romfs_vm log android libzstd)
 
 # Modul Isolasi 4: Surface VM Standalone (Fix Undefined Symbols via Dynamic Isolation)
-# Kita tambahkan flag `-Wl,--allow-shlib-undefined` khusus untuk target ini agar linker 
-# mengizinkan resolusi simbol runtime dinamis libvmeer_engine.so tanpa macet di compile-time.
 add_library(surface_vm_standalone SHARED surface_vm.cpp)
 target_compile_definitions(surface_vm_standalone PRIVATE SHADOWHOOK_IS_SHARED_LIB)
+set_target_properties(surface_vm_standalone PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined")
 target_link_libraries(surface_vm_standalone 
     shadowhook 
     log 
     android 
     EGL 
-    dl   # Wajib menyertakan library dynamic linker untuk dlopen/dlsym
+    dl   
 )
 
 # VMeer Daemon Executable Binary
