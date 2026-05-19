@@ -38,8 +38,8 @@ namespace vmeer {
 namespace art {
 
 /**
- * Mekanisme Fallback Alternatif: Memaksa target SDK version di tingkat internal VM
- * turun ke tingkat di mana pemeriksaan Hidden API dilewati secara bawaan (SDK 27 / Android 8.1).
+ * FIXED FALLBACK LAPIS 2: targetSdkVersion Spoofing yang disempurnakan.
+ * Mengatasi error "no non-static method setTargetSdkVersion(I)V" dengan resolusi instansi objek runtime secara valid.
  */
 bool ForceSetTargetSdkVersion(JNIEnv* env) {
     LOGI("vMeer ART: Mengeksekusi Fallback Lapis 2: targetSdkVersion Spoofing...");
@@ -47,35 +47,91 @@ bool ForceSetTargetSdkVersion(JNIEnv* env) {
     jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
     if (env->ExceptionCheck() || !vm_runtime_clazz) {
         env->ExceptionClear();
+        LOGE("vMeer ART: Gagal menemukan kelas dalvik/system/VMRuntime.");
+        return false;
+    }
+
+    // Ambil instansi VMRuntime tunggal yang valid (getRuntime() mengembalikan Ldalvik/system/VMRuntime;)
+    jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
+    if (env->ExceptionCheck() || !get_runtime_mid) {
+        env->ExceptionClear();
+        LOGE("vMeer ART: Gagal mendapatkan method ID VMRuntime.getRuntime()");
+        return false;
+    }
+
+    jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
+    if (env->ExceptionCheck() || !vm_runtime_obj) {
+        env->ExceptionClear();
+        LOGE("vMeer ART: Instance VMRuntime.getRuntime() bernilai NULL.");
+        return false;
+    }
+
+    // Ambil Method ID setTargetSdkVersion sebagai INSTANCE METHOD (bukan static)
+    jmethodID set_target_sdk_mid = env->GetMethodID(vm_runtime_clazz, "setTargetSdkVersion", "(I)V");
+    if (env->ExceptionCheck() || !set_target_sdk_mid) {
+        env->ExceptionClear();
+        LOGE("vMeer ART: Gagal menemukan instansi method setTargetSdkVersion(I)V");
+        return false;
+    }
+
+    // Eksekusi pemanggilan metode non-statis pada objek runtime instansi secara legal
+    env->CallVoidMethod(vm_runtime_obj, set_target_sdk_mid, 27); // Paksa ke API 27 (Android Oreo)
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("vMeer ART: VM membatalkan pemanggilan paksa setTargetSdkVersion.");
+        return false;
+    }
+
+    LOGI("vMeer ART: SUCCESS - Target SDK sukses diturunkan ke API 27. Proteksi Hidden API dinonaktifkan sistem.");
+    return true;
+}
+
+/**
+ * FIXED EXEMPTIONS BYPASS: Menggunakan injeksi string penjinak "setHiddenApiExemptions"
+ * yang diselaraskan instansinya untuk membebaskan audit log internal Android secara total.
+ */
+bool ApplyExemptionsBypass(JNIEnv* env) {
+    LOGI("vMeer ART: Mengeksekusi Lapis 3: direct-exemptions injection...");
+    jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
+    if (env->ExceptionCheck() || !vm_runtime_clazz) {
+        env->ExceptionClear();
         return false;
     }
 
     jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    jmethodID set_target_sdk_mid = env->GetMethodID(vm_runtime_clazz, "setTargetSdkVersion", "(I)V");
+    jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
 
-    if (get_runtime_mid && set_target_sdk_mid) {
+    if (get_runtime_mid && set_exemptions_mid) {
         jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
         if (vm_runtime_obj) {
-            // Set target SDK ke 27 (Android Oreo) secara paksa pada runtime instance
-            env->CallVoidMethod(vm_runtime_obj, set_target_sdk_mid, 27);
+            jclass string_clazz = env->FindClass("java/lang/String");
+            jstring empty_wildcard = env->NewStringUTF("L");
+            jobjectArray str_array = env->NewObjectArray(1, string_clazz, empty_wildcard);
+
+            env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
             if (!env->ExceptionCheck()) {
-                LOGI("vMeer ART: SUCCESS - targetSdkVersion sukses diturunkan ke API 27 secara internal.");
+                LOGI("vMeer ART: SUCCESS - direct-exemptions berhasil disuntikkan ke runtime.");
+                env->DeleteLocalRef(empty_wildcard);
+                env->DeleteLocalRef(str_array);
                 return true;
             }
             env->ExceptionClear();
+            env->DeleteLocalRef(empty_wildcard);
+            env->DeleteLocalRef(str_array);
         }
     }
     return false;
 }
 
 /**
- * ARSITEKTUR BARU: Menggunakan pencarian simbol berlapis (Multi-Signature & Multi-Library)
- * serta fallback manipulasi target SDK untuk performa bypass mutlak.
+ * ARSITEKTUR INTEGRAL: Menyeimbangkan system bypass antara Native Hooking 
+ * dan Dynamic Reflection Fallback yang andal untuk Android 14 & 15.
  */
 void ApplyNativeHiddenApiBypass(JNIEnv* env) {
     LOGI("vMeer ART: Memulai operasi Global Native Hook Bypass (Robust Mode)...");
 
-    // Daftar mangled name presisi untuk ShouldBlockAccessToMember (Android 11 - 14)
+    // Lapis 1: Coba Native Hooking ShouldBlockAccessToMember (Android 11 - 14)
     const char* art_symbols_11_14[] = {
         "_ZN3art9hiddenapi25ShouldBlockAccessToMemberEPNS_9ArtMethodENS0_12AccessMethodENS0_12ActionPolicyE",
         "_ZN3art9hiddenapi25ShouldBlockAccessToMemberEPNS_9ArtMethodENS0_12AccessMethodE",
@@ -96,7 +152,7 @@ void ApplyNativeHiddenApiBypass(JNIEnv* env) {
         }
     }
 
-    // Daftar mangled name presisi untuk Android 15 (ShouldBlockAccessToMemberImpl / Enforcement Policy)
+    // Lapis 1.5: Coba Native Hooking ShouldBlockAccessToMemberImpl (Android 15)
     const char* art_symbols_15[] = {
         "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImplEPNS_9ArtMethodENS0_12AccessMethodENS0_12ActionPolicyEb",
         "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImplEPNS_9ArtMethodENS0_12AccessMethodEb",
@@ -121,12 +177,18 @@ void ApplyNativeHiddenApiBypass(JNIEnv* env) {
         }
     }
 
-    // JIKA SELURUH HOOK BINER GAGAL: Jalankan Fallback Lapis 2 ( targetSdkVersion Spoofing )
+    // Lapis 2 & Lapis 3 Fallback (Jika integrasi static ELF hooking ditolak oleh Linker namespace Xiaomi)
     if (hook_11_14 == nullptr && hook_15 == nullptr) {
         int err = shadowhook_get_errno();
-        LOGW("vMeer ART: WARNING - Hook ELF dilewati (%s). Mengalihkan ke sistem targetSdkVersion Spoofing...", shadowhook_to_errmsg(err));
-        if (ForceSetTargetSdkVersion(env)) {
-            LOGI("vMeer ART: SUCCESS - Bypass dijamin aktif melalui regulasi targetSdkVersion < 28.");
+        LOGW("vMeer ART: WARNING - Hook ELF dilewati (%s). Mengalihkan ke sistem fallback refleksi...", shadowhook_to_errmsg(err));
+        
+        bool success = ForceSetTargetSdkVersion(env);
+        if (!success) {
+            success = ApplyExemptionsBypass(env);
+        }
+
+        if (success) {
+            LOGI("vMeer ART: SUCCESS - Bypass dijamin aktif menggunakan skema dynamic reflection fallback.");
         } else {
             LOGE("vMeer ART: FATAL - Seluruh sistem pertahanan ART gagal ditembus!");
         }
@@ -289,7 +351,7 @@ __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
     (void)clazz;
-    vmeer::art::ApplyNativeHiddenApiBypass(env); // Mengirim pointer JNIEnv untuk Lapis 2 Fallback
+    vmeer::art::ApplyNativeHiddenApiBypass(env); // Mengirim pointer JNIEnv untuk Fallback Lapis 2 & 3
 }
 
 JNIEXPORT void JNICALL
