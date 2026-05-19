@@ -2,22 +2,27 @@
 #define VMEER_EGL_BRIDGE_H
 
 #include <EGL/egl.h>
-#include <GLES2/gl2.h>
+#include <android/native_window.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * Memulai proses hooking pada libEGL.so.
- * Menargetkan eglSwapBuffers dan eglCreateWindowSurface.
+ * Memulai jembatan EGL grafis dengan mengikat native window host ke context GLES virtual.
+ * @param window Pointer valid dari ANativeWindow hasil konversi Surface Java
  */
-void start_egl_bridge();
+void start_egl_bridge(ANativeWindow* window);
 
 /**
- * Fungsi utilitas untuk mendapatkan informasi display saat ini
+ * Menghentikan pipeline render thread grafis secara aman.
  */
-EGLDisplay get_active_vmeer_display();
+void stop_egl_bridge();
+
+/**
+ * Fungsi pembantu pembacaan display environment milik vMeer
+ */
+EGLDisplay vmeer_eglGetDisplay(EGLNativeDisplayType display_id);
 
 #ifdef __cplusplus
 }
