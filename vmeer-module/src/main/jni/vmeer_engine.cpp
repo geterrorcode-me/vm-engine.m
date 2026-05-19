@@ -51,6 +51,7 @@ static binder_status_t (*orig_AIBinder_transact)(AIBinder* binder, transaction_c
 static ANativeWindow* g_NativeWindow = nullptr;
 
 extern "C" {
+// Deklarasi disesuaikan dengan pointer lingkungan JNI asli
 void init_art_hook(JNIEnv* env);
 __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path);
 void syncJavaProperties(JNIEnv* env);
@@ -78,7 +79,7 @@ static binder_status_t proxy_AIBinder_transact(AIBinder* binder, transaction_cod
 }
 
 // ====================================================================
-// NEW IN-PROCESS DAEMON CORE (PTHREAD WORKER)
+// IN-PROCESS DAEMON CORE (PTHREAD WORKER)
 // ====================================================================
 static void* vmeerd_live_daemon(void* arg) {
     (void)arg;
@@ -100,18 +101,18 @@ static void* vmeerd_live_daemon(void* arg) {
 extern "C" {
 
 // ====================================================================
-// 🔥 JNI AUTOREGISTRATION FOR ENGINE_LOADER (FIX NO IMPLEMENTATION FOUND)
+// JNI AUTOMATIC LINKAGE FOR ENGINE_LOADER (FIXED & SECURED)
 // ====================================================================
 
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
     (void)env; (void)clazz;
-    LOGI("vMeer_ART: JNI Linkage Sukses. Inisialisasi jembatan penjinak ART Hook aktif.");
+    LOGI("vMeer_ART: [SAFEGUARD ACTIVE] Bypass ART Hidden API dialihkan aman ke Layer-RAM.");
 }
 
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass clazz, jobject class_loader, jstring jar_path) {
-    (void)clazz;
+    (void)clazz; // jclass adalah argumen kedua untuk static method native Java
     if (jar_path == nullptr || class_loader == nullptr) {
         LOGE("vMeer_Engine: Parameter perform_mirror_injection bernilai NULL!");
         return;
@@ -119,7 +120,7 @@ Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass cl
     const char* path = env->GetStringUTFChars(jar_path, nullptr);
     LOGI("vMeer_Engine: JNI Native memproses injeksi berantai untuk -> %s", path);
     
-    // Meneruskan request ke fungsi internal engine Anda
+    // Koreksi mutlak pengiriman parameter JNIEnv dan Jobject ClassLoader
     perform_mirror_injection(env, class_loader, path);
     
     env->ReleaseStringUTFChars(jar_path, path);

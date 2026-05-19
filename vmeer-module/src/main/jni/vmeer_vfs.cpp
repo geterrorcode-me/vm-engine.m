@@ -24,12 +24,15 @@
 namespace vmeer {
 namespace vfs {
 
-// Deklarasi fungsi penampung biner asli (Sangat stabil untuk Android 15)
+// Penampung biner fungsi asli asli libc
 static int (*orig_openat)(int, const char*, int, mode_t) = nullptr;
 static int (*orig_getdents64)(unsigned int, void*, unsigned int) = nullptr;
 static ssize_t (*orig_read)(int, void*, size_t) = nullptr;
 static char* (*orig_getenv)(const char*) = nullptr;
 static int (*orig_ioctl)(int, unsigned long, void*) = nullptr;
+
+// 🔒 SHIELD: Thread-local guard untuk memutus rantai rekursi tak terbatas pada openat
+static thread_local bool g_inside_hook_openat = false;
 
 // --- Helper: Transformasi Path Asli -> Path Virtual Dinamis ---
 std::string RedirectPath(const char* original) {
@@ -38,16 +41,16 @@ std::string RedirectPath(const char* original) {
     std::string path(original);
     auto& ctx = RuntimeContext::Get();
     
-    // Ambil package name dinamis dari context
+    // Ambil package name dinamis dari konteks terisolasi
     std::string pkg = ctx.GetTargetPackage();
     if (pkg.empty()) {
-        pkg = "com.vmeer.guest"; // Fallback aman jika belum terdaftar
+        pkg = "com.vmeer.guest"; 
     }
     
     int vuid = ctx.GetVirtualUid();
     int user_id = vuid / 100000;
 
-    // SINKRONISASI: Diarahkan ke folder internal sandbox com.vmeer.io
+    // SINKRONISASI MUTLAK: Diarahkan murni ke ruang penyimpanan vMeer OS host
     if (path.find("/data/data/" + pkg) == 0) {
         return "/data/user/0/com.vmeer.io/app_app_bin/rootfs/user_" + std::to_string(user_id) + "/" + pkg + path.substr(11 + pkg.length());
     }
@@ -59,11 +62,18 @@ std::string RedirectPath(const char* original) {
     return path;
 }
 
-// --- [HOOK] OpenAt ---
+// --- [HOOK] OpenAt (Refactored dengan Proteksi Rekursi) ---
 int hook_openat(int dirfd, const char* pathname, int flags, mode_t mode) {
+    if (g_inside_hook_openat) {
+        return orig_openat(dirfd, pathname, flags, mode);
+    }
+
     if (pathname != nullptr) {
+        g_inside_hook_openat = true; // Kunci pemicu internal
         std::string v_path = RedirectPath(pathname);
-        if (v_path != pathname) {
+        g_inside_hook_openat = false; // Lepas kunci setelah konversi string selesai
+        
+        if (!v_path.empty() && v_path != pathname) {
             return orig_openat(dirfd, v_path.c_str(), flags, mode);
         }
     }
