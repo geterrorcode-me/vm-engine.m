@@ -145,10 +145,12 @@ char* hook_getenv(const char* name) {
     return orig_getenv(name);
 }
 
-// --- [HOOK] ioctl (Penjinak Proteksi userfaultfd Android 15) ---
+// --- [HOOK] ioctl (Penjinak Proteksi userfaultfd Android 15 - HIGH PERF) ---
 int hook_ioctl(int fd, unsigned long request, void* argp) {
-    // Interupsi request ioctl yang memicu kegagalan interupsi UFFDIO_MOVE milik userfaultfd (0xAA05 / 0xC0182205)
-    if (request == 0xAA05 || request == 0xC0182205) { 
+    // Interupsi request ioctl yang memicu kegagalan / stall subsistem memori virtual:
+    // 1. UFFDIO_MOVE (0xAA05 / 0xC0182205)
+    // 2. UFFDIO_COPY (0xC0282203) -> Mengatasi stall/timeout GC ART pada Android 14/15
+    if (request == 0xAA05 || request == 0xC0182205 || request == 0xC0282203) { 
         // Force inject kembalian status sukses agar subsistem memori virtual tidak mengalami stall/timeout
         return 0;
     }
