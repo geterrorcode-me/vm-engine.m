@@ -68,7 +68,8 @@ set(VMEER_SOURCES
     vmeer_fuse_ops.cpp
     vmeer_squashfs_bridge.cpp
     binder_vm.cpp          
-    vmeer_service_manager.cpp # FIX UTAMA: Daftarkan Virtual ServiceManager ke engine utama
+    vmeer_service_manager.cpp
+    vmeer_process_sandbox.cpp # FIX UTAMA: Daftarkan Isolated Process Namespace ke engine utama
 )
 
 # ==========================================================
