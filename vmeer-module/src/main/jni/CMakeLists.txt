@@ -67,7 +67,8 @@ set(VMEER_SOURCES
     vmeer_main.cpp
     vmeer_fuse_ops.cpp
     vmeer_squashfs_bridge.cpp
-    binder_vm.cpp          # Menyatukan binder logic ke engine utama
+    binder_vm.cpp          
+    vmeer_service_manager.cpp # FIX UTAMA: Daftarkan Virtual ServiceManager ke engine utama
 )
 
 # ==========================================================
@@ -107,10 +108,10 @@ target_compile_definitions(binder_vm PRIVATE SHADOWHOOK_IS_SHARED_LIB)
 set_target_properties(binder_vm PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined")
 target_link_libraries(binder_vm shadowhook ${LOG_LIB} ${ANDROID_LIB})
 
-# FIX MUTLAK: Modul Standalone ART (Bypass Native Hook)
+# Modul Standalone ART (Bypass Native Hook)
 add_library(art_vm SHARED art_vm.cpp)
-target_compile_definitions(art_vm PRIVATE SHADOWHOOK_IS_SHARED_LIB) # Memaksa header memuat simbol shared (.so)
-set_target_properties(art_vm PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined") # Mengizinkan dynamic resolution runtime
+target_compile_definitions(art_vm PRIVATE SHADOWHOOK_IS_SHARED_LIB) 
+set_target_properties(art_vm PROPERTIES LINK_FLAGS "-Wl,--allow-shlib-undefined") 
 target_link_libraries(art_vm 
     shadowhook 
     ${LOG_LIB} 
