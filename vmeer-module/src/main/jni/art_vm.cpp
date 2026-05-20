@@ -19,339 +19,369 @@ static bool (*orig_ShouldBlockAccessToMember_15)(void*, void*, int, int, bool) =
 
 /**
  * Proxy Hook untuk Android 11 hingga Android 14
- * Mengembalikan false secara mutlak = Akses Hidden API tidak pernah diblokir.
  */
 static bool proxy_ShouldBlockAccessToMember_11_14(void* member, void* ctx, int access_ctx, int access_method) {
-    (void)member; (void)ctx; (void)access_ctx; (void)access_method;
     return false; 
 }
 
 /**
- * Proxy Hook khusus Android 15 (Menyesuaikan parameter enkapsulasi baru ART)
+ * Proxy Hook khusus Android 15
  */
 static bool proxy_ShouldBlockAccessToMember_15(void* member, void* ctx, int access_ctx, int access_method, bool v) {
-    (void)member; (void)ctx; (void)access_ctx; (void)access_method; (void)v;
     return false;
 }
 
 namespace vmeer {
 namespace art {
 
-/**
- * FIXED FALLBACK LAPIS 2: targetSdkVersion Spoofing yang disempurnakan.
- * Mengatasi error "no non-static method setTargetSdkVersion(I)V" dengan resolusi instansi objek runtime secara valid.
- */
-bool ForceSetTargetSdkVersion(JNIEnv* env) {
-    LOGI("vMeer ART: Mengeksekusi Fallback Lapis 2: targetSdkVersion Spoofing...");
-    
-    jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
-    if (env->ExceptionCheck() || !vm_runtime_clazz) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Gagal menemukan kelas dalvik/system/VMRuntime.");
-        return false;
-    }
-
-    // Ambil instansi VMRuntime tunggal yang valid (getRuntime() mengembalikan Ldalvik/system/VMRuntime;)
-    jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    if (env->ExceptionCheck() || !get_runtime_mid) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Gagal mendapatkan method ID VMRuntime.getRuntime()");
-        return false;
-    }
-
-    jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
-    if (env->ExceptionCheck() || !vm_runtime_obj) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Instance VMRuntime.getRuntime() bernilai NULL.");
-        return false;
-    }
-
-    // Ambil Method ID setTargetSdkVersion sebagai INSTANCE METHOD (bukan static)
-    jmethodID set_target_sdk_mid = env->GetMethodID(vm_runtime_clazz, "setTargetSdkVersion", "(I)V");
-    if (env->ExceptionCheck() || !set_target_sdk_mid) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Gagal menemukan instansi method setTargetSdkVersion(I)V");
-        return false;
-    }
-
-    // Eksekusi pemanggilan metode non-statis pada objek runtime instansi secara legal
-    env->CallVoidMethod(vm_runtime_obj, set_target_sdk_mid, 27); // Paksa ke API 27 (Android Oreo)
-
+// Helper untuk membersihkan exception JNI
+static void ClearJniException(JNIEnv* env) {
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        LOGE("vMeer ART: VM membatalkan pemanggilan paksa setTargetSdkVersion.");
-        return false;
     }
-
-    LOGI("vMeer ART: SUCCESS - Target SDK sukses diturunkan ke API 27. Proteksi Hidden API dinonaktifkan sistem.");
-    return true;
 }
 
 /**
- * FIXED EXEMPTIONS BYPASS: Menggunakan injeksi string penjinak "setHiddenApiExemptions"
- * yang diselaraskan instansinya untuk membebaskan audit log internal Android secara total.
+ * Mendapatkan instansi VMRuntime secara aman
  */
-bool ApplyExemptionsBypass(JNIEnv* env) {
-    LOGI("vMeer ART: Mengeksekusi Lapis 3: direct-exemptions injection...");
+jobject GetVMRuntimeInstance(JNIEnv* env) {
     jclass vm_runtime_clazz = env->FindClass("dalvik/system/VMRuntime");
-    if (env->ExceptionCheck() || !vm_runtime_clazz) {
-        env->ExceptionClear();
-        return false;
+    if (!vm_runtime_clazz) {
+        ClearJniException(env);
+        return nullptr;
     }
 
     jmethodID get_runtime_mid = env->GetStaticMethodID(vm_runtime_clazz, "getRuntime", "()Ldalvik/system/VMRuntime;");
-    jmethodID set_exemptions_mid = env->GetMethodID(vm_runtime_clazz, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
-
-    if (get_runtime_mid && set_exemptions_mid) {
-        jobject vm_runtime_obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
-        if (vm_runtime_obj) {
-            jclass string_clazz = env->FindClass("java/lang/String");
-            jstring empty_wildcard = env->NewStringUTF("L");
-            jobjectArray str_array = env->NewObjectArray(1, string_clazz, empty_wildcard);
-
-            env->CallVoidMethod(vm_runtime_obj, set_exemptions_mid, str_array);
-            if (!env->ExceptionCheck()) {
-                LOGI("vMeer ART: SUCCESS - direct-exemptions berhasil disuntikkan ke runtime.");
-                env->DeleteLocalRef(empty_wildcard);
-                env->DeleteLocalRef(str_array);
-                return true;
-            }
-            env->ExceptionClear();
-            env->DeleteLocalRef(empty_wildcard);
-            env->DeleteLocalRef(str_array);
-        }
+    if (!get_runtime_mid) {
+        ClearJniException(env);
+        env->DeleteLocalRef(vm_runtime_clazz);
+        return nullptr;
     }
-    return false;
+
+    jobject obj = env->CallStaticObjectMethod(vm_runtime_clazz, get_runtime_mid);
+    env->DeleteLocalRef(vm_runtime_clazz);
+    
+    if (!obj) {
+        ClearJniException(env);
+        return nullptr;
+    }
+    return obj;
 }
 
 /**
- * ARSITEKTUR INTEGRAL: Menyeimbangkan system bypass antara Native Hooking 
- * dan Dynamic Reflection Fallback yang andal untuk Android 14 & 15.
+ * BYPASS STRATEGY ANDROID 15: Menggunakan Meta-Refleksi Unsafe tingkat JNI
+ * untuk mengeksekusi metode Java yang dilindungi tanpa melalui verifikasi JNI klasik.
  */
-void ApplyNativeHiddenApiBypass(JNIEnv* env) {
-    LOGI("vMeer ART: Memulai operasi Global Native Hook Bypass (Robust Mode)...");
+bool InvokeUnsafeMethod(JNIEnv* env, jobject target_obj, const char* method_name, const char* sig, ...) {
+    jclass clazz = env->GetObjectClass(target_obj);
+    jclass class_clazz = env->FindClass("java/lang/Class");
+    
+    // Gunakan getDeclaredMethod untuk menghindari restriksi JNI GetMethodID
+    jmethodID get_declared_method_id = env->GetMethodID(
+        class_clazz, 
+        "getDeclaredMethod", 
+        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"
+    );
 
-    // Lapis 1: Coba Native Hooking ShouldBlockAccessToMember (Android 11 - 14)
+    if (!get_declared_method_id) {
+        ClearJniException(env);
+        env->DeleteLocalRef(clazz);
+        env->DeleteLocalRef(class_clazz);
+        return false;
+    }
+
+    jstring j_method_name = env->NewStringUTF(method_name);
+    
+    // Deteksi tipe parameter berdasarkan nama fungsi (untuk kestabilan runtime JNI)
+    jobjectArray param_types = nullptr;
+    if (strcmp(method_name, "setTargetSdkVersion") == 0) {
+        param_types = env->NewObjectArray(1, class_clazz, nullptr);
+        jclass int_class = env->FindClass("java/lang/Integer");
+        jfieldID type_fid = env->GetStaticFieldID(int_class, "TYPE", "Ljava/lang/Class;");
+        jobject int_type_obj = env->GetStaticObjectField(int_class, type_fid);
+        env->SetObjectArrayElement(param_types, 0, int_type_obj);
+        env->DeleteLocalRef(int_class);
+        env->DeleteLocalRef(int_type_obj);
+    } else if (strcmp(method_name, "setHiddenApiExemptions") == 0) {
+        param_types = env->NewObjectArray(1, class_clazz, nullptr);
+        jclass string_array_class = env->FindClass("[Ljava/lang/String;");
+        env->SetObjectArrayElement(param_types, 0, string_array_class);
+        env->DeleteLocalRef(string_array_class);
+    }
+
+    jobject method_obj = env->CallObjectMethod(target_obj, get_declared_method_id, j_method_name, param_types);
+    env->DeleteLocalRef(j_method_name);
+    env->DeleteLocalRef(param_types);
+
+    if (env->ExceptionCheck() || !method_obj) {
+        ClearJniException(env);
+        env->DeleteLocalRef(clazz);
+        env->DeleteLocalRef(class_clazz);
+        if (method_obj) env->DeleteLocalRef(method_obj);
+        return false;
+    }
+
+    // Set accessible ke true secara dinamis
+    jclass accessible_object_clazz = env->FindClass("java/lang/reflect/AccessibleObject");
+    jmethodID set_accessible_mid = env->GetMethodID(accessible_object_clazz, "setAccessible", "(Z)V");
+    env->CallVoidMethod(method_obj, set_accessible_mid, JNI_TRUE);
+    ClearJniException(env);
+
+    // Ambil Method ID dari Java Method Object untuk pemanggilan Unsafe
+    jmethodID target_mid = env->FromReflectedMethod(method_obj);
+    
+    // Eksekusi pemanggilan nyata
+    va_list args;
+    va_start(args, sig);
+    if (strcmp(method_name, "setTargetSdkVersion") == 0) {
+        int sdk = va_arg(args, int);
+        env->CallVoidMethod(target_obj, target_mid, sdk);
+    } else if (strcmp(method_name, "setHiddenApiExemptions") == 0) {
+        jobjectArray exemptions = va_arg(args, jobjectArray);
+        env->CallVoidMethod(target_obj, target_mid, exemptions);
+    }
+    va_end(args);
+
+    bool success = !env->ExceptionCheck();
+    ClearJniException(env);
+
+    env->DeleteLocalRef(method_obj);
+    env->DeleteLocalRef(accessible_object_clazz);
+    env->DeleteLocalRef(clazz);
+    env->DeleteLocalRef(class_clazz);
+
+    return success;
+}
+
+bool ForceSetTargetSdkVersion(JNIEnv* env) {
+    LOGI("vMeer ART: Fallback Lapis 2: Spoofing Target SDK...");
+    
+    jobject vm_runtime_obj = GetVMRuntimeInstance(env);
+    if (!vm_runtime_obj) {
+        LOGE("vMeer ART: Gagal mendapatkan instance VMRuntime.");
+        return false;
+    }
+
+    // Eksekusi bypass meta-refleksi
+    bool success = InvokeUnsafeMethod(env, vm_runtime_obj, "setTargetSdkVersion", "(I)V", 28);
+    env->DeleteLocalRef(vm_runtime_obj);
+
+    if (success) {
+        LOGI("vMeer ART: SUCCESS - Target SDK diset ulang ke API 28.");
+    } else {
+        LOGE("vMeer ART: Gagal menyetel Target SDK.");
+    }
+    return success;
+}
+
+bool ApplyExemptionsBypass(JNIEnv* env) {
+    LOGI("vMeer ART: Fallback Lapis 3: setHiddenApiExemptions...");
+    
+    jobject vm_runtime_obj = GetVMRuntimeInstance(env);
+    if (!vm_runtime_obj) {
+        LOGE("vMeer ART: Gagal mendapatkan instance VMRuntime.");
+        return false;
+    }
+
+    jclass string_clazz = env->FindClass("java/lang/String");
+    jstring wildcard = env->NewStringUTF("L");
+    jobjectArray str_array = env->NewObjectArray(1, string_clazz, wildcard);
+
+    // Eksekusi bypass meta-refleksi
+    bool success = InvokeUnsafeMethod(env, vm_runtime_obj, "setHiddenApiExemptions", "([Ljava/lang/String;)V", str_array);
+
+    env->DeleteLocalRef(wildcard);
+    env->DeleteLocalRef(str_array);
+    env->DeleteLocalRef(string_clazz);
+    env->DeleteLocalRef(vm_runtime_obj);
+
+    if (success) {
+        LOGI("vMeer ART: SUCCESS - Exemptions diterapkan.");
+    } else {
+        LOGE("vMeer ART: Gagal menerapkan Exemptions.");
+    }
+    return success;
+}
+
+void ApplyNativeHiddenApiBypass(JNIEnv* env) {
+    LOGI("vMeer ART: Memulai Global Native Hook Bypass (Style: LSPosed/Unsafe)...");
+
+    // Coba Hook Android 11-14
     const char* art_symbols_11_14[] = {
         "_ZN3art9hiddenapi25ShouldBlockAccessToMemberEPNS_9ArtMethodENS0_12AccessMethodENS0_12ActionPolicyE",
         "_ZN3art9hiddenapi25ShouldBlockAccessToMemberEPNS_9ArtMethodENS0_12AccessMethodE",
-        "_ZN3art9hiddenapi25ShouldBlockAccessToMember*" 
+        nullptr
     };
 
-    void* hook_11_14 = nullptr;
-    for (const char* sym : art_symbols_11_14) {
-        hook_11_14 = shadowhook_hook_sym_name(
+    for (int i = 0; art_symbols_11_14[i] != nullptr; ++i) {
+        void* hook = shadowhook_hook_sym_name(
             "libart.so",
-            sym, 
+            art_symbols_11_14[i], 
             reinterpret_cast<void*>(proxy_ShouldBlockAccessToMember_11_14),
             reinterpret_cast<void**>(&orig_ShouldBlockAccessToMember_11_14)
         );
-        if (hook_11_14 != nullptr) {
-            LOGI("vMeer ART: SUCCESS - Global Native Bypass aktif untuk Android 11-14 via simbol: %s", sym);
+        if (hook != nullptr) {
+            LOGI("vMeer ART: Hook Sukses (Android 11-14): %s", art_symbols_11_14[i]);
             return;
         }
     }
 
-    // Lapis 1.5: Coba Native Hooking ShouldBlockAccessToMemberImpl (Android 15)
+    // Coba Hook Android 15+
     const char* art_symbols_15[] = {
         "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImplEPNS_9ArtMethodENS0_12AccessMethodENS0_12ActionPolicyEb",
         "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImplEPNS_9ArtMethodENS0_12AccessMethodEb",
-        "_ZN3art9hiddenapi29ShouldBlockAccessToMemberImpl*" 
+        nullptr
     };
+    
+    const char* libs_15[] = {"libart.so", "libartbase.so", nullptr};
 
-    void* hook_15 = nullptr;
-    const char* art_libs[] = {"libart.so", "libartbase.so"};
-
-    for (const char* lib : art_libs) {
-        for (const char* sym : art_symbols_15) {
-            hook_15 = shadowhook_hook_sym_name(
-                lib,
-                sym, 
+    for (int l = 0; libs_15[l] != nullptr; ++l) {
+        for (int s = 0; art_symbols_15[s] != nullptr; ++s) {
+            void* hook = shadowhook_hook_sym_name(
+                libs_15[l],
+                art_symbols_15[s], 
                 reinterpret_cast<void*>(proxy_ShouldBlockAccessToMember_15),
                 reinterpret_cast<void**>(&orig_ShouldBlockAccessToMember_15)
             );
-            if (hook_15 != nullptr) {
-                LOGI("vMeer ART: SUCCESS - Global Native Bypass aktif untuk Android 15 [%s] -> %s", lib, sym);
+            if (hook != nullptr) {
+                LOGI("vMeer ART: Hook Sukses (Android 15+): %s in %s", art_symbols_15[s], libs_15[l]);
                 return;
             }
         }
     }
 
-    // Lapis 2 & Lapis 3 Fallback (Jika integrasi static ELF hooking ditolak oleh Linker namespace Xiaomi)
-    if (hook_11_14 == nullptr && hook_15 == nullptr) {
-        int err = shadowhook_get_errno();
-        LOGW("vMeer ART: WARNING - Hook ELF dilewati (%s). Mengalihkan ke sistem fallback refleksi...", shadowhook_to_errmsg(err));
-        
-        bool success = ForceSetTargetSdkVersion(env);
-        if (!success) {
-            success = ApplyExemptionsBypass(env);
-        }
-
-        if (success) {
-            LOGI("vMeer ART: SUCCESS - Bypass dijamin aktif menggunakan skema dynamic reflection fallback.");
-        } else {
-            LOGE("vMeer ART: FATAL - Seluruh sistem pertahanan ART gagal ditembus!");
-        }
+    // Fallback jika Hook Gagal (Android 15/Xiaomi Custom Namespace Protection)
+    LOGW("vMeer ART: Native Hook Gagal. Menggunakan Robust JNI Fallback...");
+    
+    // Eksekusi Lapis 3 (Exemptions) & Lapis 2 (targetSDK) secara berurutan
+    if (!ApplyExemptionsBypass(env)) {
+        ForceSetTargetSdkVersion(env);
     }
 }
 
-/**
- * Menyuntikkan berkas .jar virtual dari VFS secara dinamis ke dalam ClassLoader aktif.
- */
 bool InjectMirrorFramework(JNIEnv* env, jobject class_loader, const std::string& jar_path) {
-    if (jar_path.find(".bin") != std::string::npos) {
-        LOGE("vMeer ART: REJECTED! %s dilarang keras dibaca langsung oleh ART.", jar_path.c_str());
+    if (jar_path.empty() || class_loader == nullptr) {
+        LOGE("vMeer ART: Parameter tidak valid.");
         return false;
     }
 
-    std::string clean_jar_name = jar_path.substr(jar_path.find_last_of("/\\") + 1);
-    LOGI("vMeer ART: Menjadwalkan penggabungan classpath -> %s", clean_jar_name.c_str());
-
-    if (class_loader == nullptr) {
-        LOGE("vMeer ART: ClassLoader host bernilai NULL!");
+    if (access(jar_path.c_str(), R_OK) != 0) {
+        LOGE("vMeer ART: File tidak dapat diakses: %s", jar_path.c_str());
         return false;
     }
 
-    int jar_fd = open(jar_path.c_str(), O_RDONLY);
-    if (jar_fd < 0) {
-        LOGE("vMeer ART: File %s tidak dapat dibaca di VFS.", clean_jar_name.c_str());
+    LOGI("vMeer ART: Menyuntikkan JAR: %s", jar_path.c_str());
+
+    if (env->PushLocalFrame(32) != 0) {
+        LOGE("vMeer ART: Gagal push local frame.");
         return false;
     }
-    close(jar_fd);
 
-    jclass loader_clazz = env->FindClass("dalvik/system/BaseDexClassLoader");
-    if (env->ExceptionCheck() || !loader_clazz) { 
-        env->ExceptionClear(); 
-        LOGE("vMeer ART: Gagal memuat BaseDexClassLoader.");
-        return false; 
-    }
+    bool result = false;
+    do {
+        jclass loader_clazz = env->FindClass("dalvik/system/BaseDexClassLoader");
+        if (!loader_clazz) break;
 
-    jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
-    if (!path_list_fid) { 
-        LOGE("vMeer ART: Field 'pathList' tidak ditemukan."); 
-        return false; 
-    }
+        jfieldID path_list_fid = env->GetFieldID(loader_clazz, "pathList", "Ldalvik/system/DexPathList;");
+        if (!path_list_fid) break;
 
-    jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
-    if (!path_list_obj) { 
-        LOGE("vMeer ART: Instance 'pathList' bernilai NULL."); 
-        return false; 
-    }
+        jobject path_list_obj = env->GetObjectField(class_loader, path_list_fid);
+        if (!path_list_obj) break;
 
-    jclass path_list_clazz = env->GetObjectClass(path_list_obj);
+        jclass path_list_clazz = env->GetObjectClass(path_list_obj);
+        
+        jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
+        if (!elements_fid) break;
 
-    jfieldID elements_fid = env->GetFieldID(path_list_clazz, "dexElements", "[Ldalvik/system/DexPathList$Element;");
-    if (!elements_fid) { 
-        LOGE("vMeer ART: Field 'dexElements' tidak ditemukan."); 
-        return false; 
-    }
+        jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
+        jsize old_len = old_elements ? env->GetArrayLength(old_elements) : 0;
 
-    jobjectArray old_elements = (jobjectArray)env->GetObjectField(path_list_obj, elements_fid);
-    jsize old_len = (old_elements != nullptr) ? env->GetArrayLength(old_elements) : 0;
-
-    jmethodID make_elements_mid = env->GetStaticMethodID(
-        path_list_clazz, 
-        "makePathElements", 
-        "(Ljava/util/List;Ljava/io/File;Ljava/util/List;)[Ldalvik/system/DexPathList$Element;"
-    );
-
-    if (!make_elements_mid) {
-        env->ExceptionClear();
-        make_elements_mid = env->GetStaticMethodID(
-            path_list_clazz, 
-            "makeDexElements", 
-            "(Ljava/util/List;Ljava/io/File;Ljava/util/List;Ljava/lang/ClassLoader;)[Ldalvik/system/DexPathList$Element;"
+        jmethodID make_elements_mid = env->GetStaticMethodID(
+            path_list_clazz, "makePathElements", 
+            "(Ljava/util/List;Ljava/io/File;Ljava/util/List;)[Ldalvik/system/DexPathList$Element;"
         );
-    }
 
-    if (!make_elements_mid) {
-        LOGE("vMeer ART: Gagal menemukan fungsi generator DexPathList$Element.");
-        return false;
-    }
+        if (!make_elements_mid) {
+            ClearJniException(env);
+            make_elements_mid = env->GetStaticMethodID(
+                path_list_clazz, "makeDexElements", 
+                "(Ljava/util/List;Ljava/io/File;Ljava/util/List;Ljava/lang/ClassLoader;)[Ldalvik/system/DexPathList$Element;"
+            );
+        }
+        if (!make_elements_mid) break;
 
-    jclass array_list_clazz = env->FindClass("java/util/ArrayList");
-    jmethodID array_list_init = env->GetMethodID(array_list_clazz, "<init>", "()V");
-    jmethodID array_list_add = env->GetMethodID(array_list_clazz, "add", "(Ljava/lang/Object;)Z");
+        jclass array_list_clazz = env->FindClass("java/util/ArrayList");
+        jmethodID array_list_init = env->GetMethodID(array_list_clazz, "<init>", "()V");
+        jmethodID array_list_add = env->GetMethodID(array_list_clazz, "add", "(Ljava/lang/Object;)Z");
 
-    jobject files_list = env->NewObject(array_list_clazz, array_list_init);
-    jclass file_clazz = env->FindClass("java/io/File");
-    jmethodID file_init = env->GetMethodID(file_clazz, "<init>", "(Ljava/lang/String;)V");
-    
-    jstring j_path = env->NewStringUTF(jar_path.c_str());
-    jobject file_obj = env->NewObject(file_clazz, file_init, j_path);
-    env->CallBooleanMethod(files_list, array_list_add, file_obj);
+        jobject files_list = env->NewObject(array_list_clazz, array_list_init);
+        
+        jclass file_clazz = env->FindClass("java/io/File");
+        jmethodID file_init = env->GetMethodID(file_clazz, "<init>", "(Ljava/lang/String;)V");
+        jstring j_path = env->NewStringUTF(jar_path.c_str());
+        jobject file_obj = env->NewObject(file_clazz, file_init, j_path);
+        
+        env->CallBooleanMethod(files_list, array_list_add, file_obj);
 
-    jobject suppressed_exceptions_list = env->NewObject(array_list_clazz, array_list_init);
+        jobject suppressed_list = env->NewObject(array_list_clazz, array_list_init);
 
-    jobjectArray new_element_array = (jobjectArray)env->CallStaticObjectMethod(
-        path_list_clazz, 
-        make_elements_mid, 
-        files_list, 
-        nullptr, 
-        suppressed_exceptions_list
-    );
+        jobjectArray new_elements = (jobjectArray)env->CallStaticObjectMethod(
+            path_list_clazz, make_elements_mid, files_list, nullptr, suppressed_list
+        );
 
-    if (env->ExceptionCheck() || !new_element_array) {
-        env->ExceptionClear();
-        LOGE("vMeer ART: Gagal mengurai biner DEX dari berkas: %s", clean_jar_name.c_str());
-        env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
-        env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
-        return false;
-    }
+        if (!new_elements || env->ExceptionCheck()) {
+            ClearJniException(env);
+            LOGE("vMeer ART: Gagal membuat Dex Elements.");
+            break;
+        }
 
-    jsize new_elements_len = env->GetArrayLength(new_element_array);
-    if (new_elements_len == 0) {
-        LOGE("vMeer ART: Hasil dekapsulasi elemen %s kosong.", clean_jar_name.c_str());
-        env->DeleteLocalRef(j_path); env->DeleteLocalRef(files_list);
-        env->DeleteLocalRef(file_obj); env->DeleteLocalRef(suppressed_exceptions_list);
-        return false;
-    }
+        jsize new_len = env->GetArrayLength(new_elements);
+        if (new_len == 0) {
+            LOGE("vMeer ART: Elemen DEX kosong.");
+            break;
+        }
 
-    jclass element_clazz = env->FindClass("dalvik/system/DexPathList$Element");
-    jobjectArray combined_elements = env->NewObjectArray(old_len + new_elements_len, element_clazz, nullptr);
+        jclass element_clazz = env->FindClass("dalvik/system/DexPathList$Element");
+        jobjectArray combined_elements = env->NewObjectArray(old_len + new_len, element_clazz, nullptr);
 
-    for (jsize i = 0; i < old_len; i++) {
-        jobject element = env->GetObjectArrayElement(old_elements, i);
-        env->SetObjectArrayElement(combined_elements, i, element);
-        env->DeleteLocalRef(element);
-    }
+        for (jsize i = 0; i < old_len; i++) {
+            jobject el = env->GetObjectArrayElement(old_elements, i);
+            env->SetObjectArrayElement(combined_elements, i, el);
+            env->DeleteLocalRef(el);
+        }
 
-    for (jsize i = 0; i < new_elements_len; i++) {
-        jobject element = env->GetObjectArrayElement(new_element_array, i);
-        env->SetObjectArrayElement(combined_elements, old_len + i, element);
-        env->DeleteLocalRef(element);
-    }
+        for (jsize i = 0; i < new_len; i++) {
+            jobject el = env->GetObjectArrayElement(new_elements, i);
+            env->SetObjectArrayElement(combined_elements, old_len + i, el);
+            env->DeleteLocalRef(el);
+        }
 
-    env->SetObjectField(path_list_obj, elements_fid, combined_elements);
-    LOGI("vMeer ART: INTEGRATION LIVE -> Komponen %s sukses disatukan ke runtime.", clean_jar_name.c_str());
+        env->SetObjectField(path_list_obj, elements_fid, combined_elements);
+        
+        LOGI("vMeer ART: Injektasi Berhasil.");
+        result = true;
 
-    env->DeleteLocalRef(j_path);
-    env->DeleteLocalRef(files_list);
-    env->DeleteLocalRef(file_obj);
-    env->DeleteLocalRef(suppressed_exceptions_list);
+    } while (false);
 
-    return true;
+    env->PopLocalFrame(nullptr);
+    return result;
 }
 
 } // namespace art
 } // namespace vmeer
 
-// =============================================================================
-// GERBANG EKSPOR SIMBOL JNI
-// =============================================================================
-
 extern "C" {
 
 __attribute__((visibility("default"))) void perform_mirror_injection(JNIEnv* env, jobject class_loader, const char* path) {
-    if (path != nullptr && env != nullptr) {
-        vmeer::art::InjectMirrorFramework(env, class_loader, path);
+    if (path && env && class_loader) {
+        vmeer::art::InjectMirrorFramework(env, class_loader, std::string(path));
     }
 }
 
 JNIEXPORT void JNICALL
 Java_com_vmeer_io_EngineLoader_init_1art_1hook(JNIEnv* env, jclass clazz) {
     (void)clazz;
-    vmeer::art::ApplyNativeHiddenApiBypass(env); // Mengirim pointer JNIEnv untuk Fallback Lapis 2 & 3
+    vmeer::art::ApplyNativeHiddenApiBypass(env);
 }
 
 JNIEXPORT void JNICALL
@@ -361,7 +391,7 @@ Java_com_vmeer_io_EngineLoader_perform_1mirror_1injection(JNIEnv* env, jclass cl
     
     const char* native_path = env->GetStringUTFChars(path, nullptr);
     if (native_path) {
-        vmeer::art::InjectMirrorFramework(env, class_loader, native_path);
+        vmeer::art::InjectMirrorFramework(env, class_loader, std::string(native_path));
         env->ReleaseStringUTFChars(path, native_path);
     }
 }
