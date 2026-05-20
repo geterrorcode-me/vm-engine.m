@@ -69,90 +69,9 @@ jobject GetVMRuntimeInstance(JNIEnv* env) {
 }
 
 /**
- * BYPASS STRATEGY ANDROID 15: Menggunakan Meta-Refleksi Unsafe tingkat JNI
- * untuk mengeksekusi metode Java yang dilindungi tanpa melalui verifikasi JNI klasik.
+ * BYPASS KOKOH UNTUK LAPIS 2 (setTargetSdkVersion)
+ * Memanfaatkan Class.getDeclaredMethod + setAccessible(true) tanpa va_list variadik yang berbahaya
  */
-bool InvokeUnsafeMethod(JNIEnv* env, jobject target_obj, const char* method_name, const char* sig, ...) {
-    jclass clazz = env->GetObjectClass(target_obj);
-    jclass class_clazz = env->FindClass("java/lang/Class");
-    
-    // Gunakan getDeclaredMethod untuk menghindari restriksi JNI GetMethodID
-    jmethodID get_declared_method_id = env->GetMethodID(
-        class_clazz, 
-        "getDeclaredMethod", 
-        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"
-    );
-
-    if (!get_declared_method_id) {
-        ClearJniException(env);
-        env->DeleteLocalRef(clazz);
-        env->DeleteLocalRef(class_clazz);
-        return false;
-    }
-
-    jstring j_method_name = env->NewStringUTF(method_name);
-    
-    // Deteksi tipe parameter berdasarkan nama fungsi (untuk kestabilan runtime JNI)
-    jobjectArray param_types = nullptr;
-    if (strcmp(method_name, "setTargetSdkVersion") == 0) {
-        param_types = env->NewObjectArray(1, class_clazz, nullptr);
-        jclass int_class = env->FindClass("java/lang/Integer");
-        jfieldID type_fid = env->GetStaticFieldID(int_class, "TYPE", "Ljava/lang/Class;");
-        jobject int_type_obj = env->GetStaticObjectField(int_class, type_fid);
-        env->SetObjectArrayElement(param_types, 0, int_type_obj);
-        env->DeleteLocalRef(int_class);
-        env->DeleteLocalRef(int_type_obj);
-    } else if (strcmp(method_name, "setHiddenApiExemptions") == 0) {
-        param_types = env->NewObjectArray(1, class_clazz, nullptr);
-        jclass string_array_class = env->FindClass("[Ljava/lang/String;");
-        env->SetObjectArrayElement(param_types, 0, string_array_class);
-        env->DeleteLocalRef(string_array_class);
-    }
-
-    jobject method_obj = env->CallObjectMethod(target_obj, get_declared_method_id, j_method_name, param_types);
-    env->DeleteLocalRef(j_method_name);
-    env->DeleteLocalRef(param_types);
-
-    if (env->ExceptionCheck() || !method_obj) {
-        ClearJniException(env);
-        env->DeleteLocalRef(clazz);
-        env->DeleteLocalRef(class_clazz);
-        if (method_obj) env->DeleteLocalRef(method_obj);
-        return false;
-    }
-
-    // Set accessible ke true secara dinamis
-    jclass accessible_object_clazz = env->FindClass("java/lang/reflect/AccessibleObject");
-    jmethodID set_accessible_mid = env->GetMethodID(accessible_object_clazz, "setAccessible", "(Z)V");
-    env->CallVoidMethod(method_obj, set_accessible_mid, JNI_TRUE);
-    ClearJniException(env);
-
-    // Ambil Method ID dari Java Method Object untuk pemanggilan Unsafe
-    jmethodID target_mid = env->FromReflectedMethod(method_obj);
-    
-    // Eksekusi pemanggilan nyata
-    va_list args;
-    va_start(args, sig);
-    if (strcmp(method_name, "setTargetSdkVersion") == 0) {
-        int sdk = va_arg(args, int);
-        env->CallVoidMethod(target_obj, target_mid, sdk);
-    } else if (strcmp(method_name, "setHiddenApiExemptions") == 0) {
-        jobjectArray exemptions = va_arg(args, jobjectArray);
-        env->CallVoidMethod(target_obj, target_mid, exemptions);
-    }
-    va_end(args);
-
-    bool success = !env->ExceptionCheck();
-    ClearJniException(env);
-
-    env->DeleteLocalRef(method_obj);
-    env->DeleteLocalRef(accessible_object_clazz);
-    env->DeleteLocalRef(clazz);
-    env->DeleteLocalRef(class_clazz);
-
-    return success;
-}
-
 bool ForceSetTargetSdkVersion(JNIEnv* env) {
     LOGI("vMeer ART: Fallback Lapis 2: Spoofing Target SDK...");
     
@@ -162,8 +81,66 @@ bool ForceSetTargetSdkVersion(JNIEnv* env) {
         return false;
     }
 
-    // Eksekusi bypass meta-refleksi
-    bool success = InvokeUnsafeMethod(env, vm_runtime_obj, "setTargetSdkVersion", "(I)V", 28);
+    jclass vm_runtime_clazz = env->GetObjectClass(vm_runtime_obj);
+    jclass class_clazz = env->FindClass("java/lang/Class");
+    
+    // Cari getDeclaredMethod
+    jmethodID get_declared_method_id = env->GetMethodID(
+        class_clazz, 
+        "getDeclaredMethod", 
+        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"
+    );
+
+    if (!get_declared_method_id) {
+        ClearJniException(env);
+        env->DeleteLocalRef(vm_runtime_clazz);
+        env->DeleteLocalRef(class_clazz);
+        env->DeleteLocalRef(vm_runtime_obj);
+        return false;
+    }
+
+    jstring j_method_name = env->NewStringUTF("setTargetSdkVersion");
+    jobjectArray param_types = env->NewObjectArray(1, class_clazz, nullptr);
+    
+    jclass int_class = env->FindClass("java/lang/Integer");
+    jfieldID type_fid = env->GetStaticFieldID(int_class, "TYPE", "Ljava/lang/Class;");
+    jobject int_type_obj = env->GetStaticObjectField(int_class, type_fid);
+    env->SetObjectArrayElement(param_types, 0, int_type_obj);
+
+    jobject method_obj = env->CallObjectMethod(vm_runtime_clazz, get_declared_method_id, j_method_name, param_types);
+    
+    env->DeleteLocalRef(j_method_name);
+    env->DeleteLocalRef(param_types);
+    env->DeleteLocalRef(int_class);
+    env->DeleteLocalRef(int_type_obj);
+
+    if (env->ExceptionCheck() || !method_obj) {
+        ClearJniException(env);
+        env->DeleteLocalRef(vm_runtime_clazz);
+        env->DeleteLocalRef(class_clazz);
+        env->DeleteLocalRef(vm_runtime_obj);
+        return false;
+    }
+
+    // Set accessible ke true secara dinamis
+    jclass accessible_object_clazz = env->FindClass("java/lang/reflect/AccessibleObject");
+    jmethodID set_accessible_mid = env->GetMethodID(accessible_object_clazz, "setAccessible", "(Z)V");
+    env->CallVoidMethod(method_obj, set_accessible_mid, JNI_TRUE);
+    ClearJniException(env);
+
+    // Ambil Method ID dari Java Method Object untuk pemanggilan langsung yang aman
+    jmethodID target_mid = env->FromReflectedMethod(method_obj);
+    
+    // Eksekusi pemanggilan JNI murni (mengunci SDK ke 28 / Pie untuk mematikan hiddenapi)
+    env->CallVoidMethod(vm_runtime_obj, target_mid, 28);
+
+    bool success = !env->ExceptionCheck();
+    ClearJniException(env);
+
+    env->DeleteLocalRef(method_obj);
+    env->DeleteLocalRef(accessible_object_clazz);
+    env->DeleteLocalRef(vm_runtime_clazz);
+    env->DeleteLocalRef(class_clazz);
     env->DeleteLocalRef(vm_runtime_obj);
 
     if (success) {
@@ -174,6 +151,10 @@ bool ForceSetTargetSdkVersion(JNIEnv* env) {
     return success;
 }
 
+/**
+ * BYPASS KOKOH UNTUK LAPIS 3 (setHiddenApiExemptions)
+ * Menggunakan direct method parsing yang telah disembunyikan dari verifikator native ART
+ */
 bool ApplyExemptionsBypass(JNIEnv* env) {
     LOGI("vMeer ART: Fallback Lapis 3: setHiddenApiExemptions...");
     
@@ -183,16 +164,67 @@ bool ApplyExemptionsBypass(JNIEnv* env) {
         return false;
     }
 
+    jclass vm_runtime_clazz = env->GetObjectClass(vm_runtime_obj);
+    jclass class_clazz = env->FindClass("java/lang/Class");
+    
+    jmethodID get_declared_method_id = env->GetMethodID(
+        class_clazz, 
+        "getDeclaredMethod", 
+        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;"
+    );
+
+    if (!get_declared_method_id) {
+        ClearJniException(env);
+        env->DeleteLocalRef(vm_runtime_clazz);
+        env->DeleteLocalRef(class_clazz);
+        env->DeleteLocalRef(vm_runtime_obj);
+        return false;
+    }
+
+    jstring j_method_name = env->NewStringUTF("setHiddenApiExemptions");
+    jobjectArray param_types = env->NewObjectArray(1, class_clazz, nullptr);
+    jclass string_array_class = env->FindClass("[Ljava/lang/String;");
+    env->SetObjectArrayElement(param_types, 0, string_array_class);
+
+    jobject method_obj = env->CallObjectMethod(vm_runtime_clazz, get_declared_method_id, j_method_name, param_types);
+    
+    env->DeleteLocalRef(j_method_name);
+    env->DeleteLocalRef(param_types);
+    env->DeleteLocalRef(string_array_class);
+
+    if (env->ExceptionCheck() || !method_obj) {
+        ClearJniException(env);
+        env->DeleteLocalRef(vm_runtime_clazz);
+        env->DeleteLocalRef(class_clazz);
+        env->DeleteLocalRef(vm_runtime_obj);
+        return false;
+    }
+
+    jclass accessible_object_clazz = env->FindClass("java/lang/reflect/AccessibleObject");
+    jmethodID set_accessible_mid = env->GetMethodID(accessible_object_clazz, "setAccessible", "(Z)V");
+    env->CallVoidMethod(method_obj, set_accessible_mid, JNI_TRUE);
+    ClearJniException(env);
+
+    jmethodID target_mid = env->FromReflectedMethod(method_obj);
+
+    // Persiapkan array parameter exemptions wildcard "L"
     jclass string_clazz = env->FindClass("java/lang/String");
     jstring wildcard = env->NewStringUTF("L");
     jobjectArray str_array = env->NewObjectArray(1, string_clazz, wildcard);
 
-    // Eksekusi bypass meta-refleksi
-    bool success = InvokeUnsafeMethod(env, vm_runtime_obj, "setHiddenApiExemptions", "([Ljava/lang/String;)V", str_array);
+    // Panggil method setHiddenApiExemptions
+    env->CallVoidMethod(vm_runtime_obj, target_mid, str_array);
+    
+    bool success = !env->ExceptionCheck();
+    ClearJniException(env);
 
     env->DeleteLocalRef(wildcard);
     env->DeleteLocalRef(str_array);
     env->DeleteLocalRef(string_clazz);
+    env->DeleteLocalRef(method_obj);
+    env->DeleteLocalRef(accessible_object_clazz);
+    env->DeleteLocalRef(vm_runtime_clazz);
+    env->DeleteLocalRef(class_clazz);
     env->DeleteLocalRef(vm_runtime_obj);
 
     if (success) {
