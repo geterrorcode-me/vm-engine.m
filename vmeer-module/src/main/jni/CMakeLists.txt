@@ -69,7 +69,8 @@ set(VMEER_SOURCES
     vmeer_squashfs_bridge.cpp
     binder_vm.cpp          
     vmeer_service_manager.cpp
-    vmeer_process_sandbox.cpp # FIX UTAMA: Daftarkan Isolated Process Namespace ke engine utama
+    vmeer_process_sandbox.cpp
+    egl_virtual_hook.cpp      # FIX UTAMA: Daftarkan GPU Virtualization Hook ke engine utama
 )
 
 # ==========================================================

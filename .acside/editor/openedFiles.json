@@ -1,32 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/binder_vm.cpp",
+      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/egl_virtual_hook.cpp",
       "selection": {
         "end": {
-          "column": 15,
-          "index": 3736,
-          "line": 110
+          "column": 43,
+          "index": 1270,
+          "line": 30
         },
         "start": {
-          "column": 15,
-          "index": 3736,
-          "line": 110
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/vm-engine.m/vmeer-module/src/main/jni/vmeer_process_sandbox.cpp",
-      "selection": {
-        "end": {
-          "column": 15,
-          "index": 5800,
-          "line": 161
-        },
-        "start": {
-          "column": 15,
-          "index": 5800,
-          "line": 161
+          "column": 43,
+          "index": 1270,
+          "line": 30
         }
       }
     },
@@ -35,13 +20,13 @@
       "selection": {
         "end": {
           "column": 72,
-          "index": 4341,
-          "line": 139
+          "index": 4368,
+          "line": 140
         },
         "start": {
           "column": 72,
-          "index": 4341,
-          "line": 139
+          "index": 4368,
+          "line": 140
         }
       }
     }
